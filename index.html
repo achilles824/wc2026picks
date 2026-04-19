@@ -16,9 +16,9 @@
 -->
 <script>
   const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBnbqn5BKYYSKRvRupTSyNLM-vN6Fvnn-k",
-    authDomain: "world-cup-2026-pool-29c25.firebaseapp.com",
-    projectId: "world-cup-2026-pool-29c25"
+    apiKey: "PASTE_YOUR_API_KEY_HERE",
+    authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+    projectId: "PASTE_YOUR_PROJECT_ID_HERE"
   };
 
   // Commissioner emails — get the Admin tab automatically
@@ -507,11 +507,18 @@ body { font-family: var(--fb); background: var(--dark); color: var(--text); min-
   <div class="modal">
     <h2>💰 Entry Fee</h2>
     <p>Pay <strong id="modal-fee"></strong> to <strong id="modal-venmo"></strong> on Venmo to enter the pool. Once the commissioner confirms your payment, your entry will be fully active.</p>
+
+    <div style="background:#fff3cd;border:1px solid #f0ad4e;border-radius:10px;padding:12px 14px;margin:12px 0;text-align:left">
+      <p style="font-size:13px;color:#856404;font-weight:700;margin-bottom:6px">⚠️ Important — Venmo note required</p>
+      <p style="font-size:13px;color:#856404;line-height:1.6;margin:0">The note field will be pre-filled with your name. <strong>If you are paying for multiple people</strong> (e.g. a spouse, friend, or family member), you must <strong>edit the note to include every name you are paying for</strong> — otherwise we won't know who the extra payment is for and it may not get credited.<br><br>
+      Example note: <em>"John Smith, Jane Smith"</em></p>
+    </div>
+
     <a id="venmo-link" href="#" class="venmo-btn" target="_blank">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M19.5 1.5C20.9 3.3 21.5 5.1 21.5 7.4c0 6.9-5.9 15.9-10.7 22.1H2.6L0 2.5l8.2-.8 1.4 11.1c1.3-2.1 2.9-5.5 2.9-7.7 0-1.2-.2-2.1-.6-2.9L19.5 1.5z"/></svg>
       Pay on Venmo
     </a>
-    <p style="font-size:12px;color:#aaa">After paying, come back and your status will update once the commissioner confirms.</p>
+    <p style="font-size:12px;color:#aaa;margin-top:10px">After paying, come back and your status will update once the commissioner confirms.</p>
     <span class="modal-close" onclick="closeVenmoModal()">Close</span>
   </div>
 </div>
