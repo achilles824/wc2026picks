@@ -16,9 +16,9 @@
 -->
 <script>
   const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBnbqn5BKYYSKRvRupTSyNLM-vN6Fvnn-k",
-    authDomain: "world-cup-2026-pool-29c25.firebaseapp.com",
-    projectId: "world-cup-2026-pool-29c25"
+    apiKey: "PASTE_YOUR_API_KEY_HERE",
+    authDomain: "PASTE_YOUR_AUTH_DOMAIN_HERE",
+    projectId: "PASTE_YOUR_PROJECT_ID_HERE"
   };
 
   // Commissioner emails — get the Admin tab automatically
@@ -109,7 +109,7 @@ body { font-family: var(--fb); background: var(--dark); color: var(--text); min-
 .gname { font-family: var(--fd); font-size: 1.2rem; letter-spacing: 1px; }
 .ghint { font-size: 11px; opacity: .75; }
 .tlist { padding: 8px; }
-.trow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; background: #fff; margin-bottom: 4px; cursor: grab; border: 1.5px solid transparent; transition: all .1s; user-select: none; }
+.trow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; background: #fff; margin-bottom: 4px; cursor: grab; border: 1.5px solid transparent; transition: all .1s; user-select: none; -webkit-user-select: none; touch-action: none; }
 .trow:active { cursor: grabbing; }
 .trow.dragging { opacity: .35; }
 .trow.drag-over { border-color: var(--green); background: #f0fff5; }
@@ -832,6 +832,8 @@ function buildRow(team, i, gid, list, locked) {
 }
 
 function setupDrag(row, gid, list) {
+  // ── Mouse drag (desktop) ──
+  row.setAttribute('draggable', true);
   row.addEventListener('dragstart', e => { dragSrc = row; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
   row.addEventListener('dragend', () => { row.classList.remove('dragging'); list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over')); });
   row.addEventListener('dragover', e => { e.preventDefault(); if (dragSrc && dragSrc !== row && dragSrc.dataset.group === gid) { list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over')); row.classList.add('drag-over'); } });
@@ -843,6 +845,70 @@ function setupDrag(row, gid, list) {
       if (si < ti) list.insertBefore(dragSrc, row.nextSibling); else list.insertBefore(dragSrc, row);
       refreshBadges(list);
     }
+  });
+
+  // ── Touch drag (iOS / Android) ──
+  let touchDragSrc = null, touchClone = null, touchOffsetY = 0;
+
+  row.addEventListener('touchstart', e => {
+    touchDragSrc = row;
+    row.classList.add('dragging');
+    const touch = e.touches[0];
+    const rect = row.getBoundingClientRect();
+    touchOffsetY = touch.clientY - rect.top;
+
+    // Create a floating clone that follows the finger
+    touchClone = row.cloneNode(true);
+    touchClone.style.cssText = `
+      position: fixed; z-index: 1000; pointer-events: none; opacity: 0.85;
+      left: ${rect.left}px; top: ${rect.top}px;
+      width: ${rect.width}px; background: #fff;
+      border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    `;
+    document.body.appendChild(touchClone);
+  }, { passive: true });
+
+  row.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!touchDragSrc || !touchClone) return;
+    const touch = e.touches[0];
+
+    // Move the clone with the finger
+    touchClone.style.top = (touch.clientY - touchOffsetY) + 'px';
+
+    // Find which row the finger is over
+    touchClone.style.display = 'none';
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    touchClone.style.display = '';
+    const target = el && el.closest('.trow');
+
+    list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over'));
+    if (target && target !== touchDragSrc && target.dataset.group === gid) {
+      target.classList.add('drag-over');
+    }
+  }, { passive: false });
+
+  row.addEventListener('touchend', e => {
+    if (!touchDragSrc || !touchClone) return;
+    const touch = e.changedTouches[0];
+
+    // Clean up clone
+    touchClone.remove();
+    touchClone = null;
+    touchDragSrc.classList.remove('dragging');
+    list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over'));
+
+    // Find drop target
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const target = el && el.closest('.trow');
+    if (target && target !== touchDragSrc && target.dataset.group === gid) {
+      const rows = [...list.querySelectorAll('.trow')];
+      const si = rows.indexOf(touchDragSrc), ti = rows.indexOf(target);
+      if (si < ti) list.insertBefore(touchDragSrc, target.nextSibling);
+      else list.insertBefore(touchDragSrc, target);
+      refreshBadges(list);
+    }
+    touchDragSrc = null;
   });
 }
 
