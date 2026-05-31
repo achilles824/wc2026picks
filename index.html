@@ -751,6 +751,8 @@ async function doForgotPassword() {
     err.textContent = friendlyErr(e.code);
   }
 }
+
+function friendlyErr(code) {
   const m = {
     'auth/email-already-in-use': 'That email is already registered. Try signing in.',
     'auth/invalid-email': 'Please enter a valid email address.',
