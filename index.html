@@ -677,16 +677,22 @@ body { font-family: var(--fb); background: var(--dark); color: var(--text); min-
 
     <div class="asec">
       <h3>Group Stage — Official Finishing Order</h3>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Set the actual 1st–4th finish for each group. This auto-seeds the Round of 32 bracket.</p>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Set the actual 1st–4th finish for each group. This auto-seeds the Round of 32 bracket. Use <strong>Auto-fill</strong> to compute standings from live match data (points → goal difference → goals scored → head-to-head), then <strong>review and Save</strong>.</p>
       <div class="aggrid" id="admin-groups"></div>
-      <button class="btn-s" style="margin-top:1rem" onclick="saveAdminGroups()">Save Group Results & Auto-Seed Bracket</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;align-items:center">
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="autoFillGroupResults()">⚡ Auto-fill from live results</button>
+        <button class="btn-s" onclick="saveAdminGroups()">Save Group Results & Auto-Seed Bracket</button>
+      </div>
     </div>
 
     <div class="asec">
       <h3>Knockout Results — Official Match Winners</h3>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Select the winner of each knockout match to score brackets and seed the next round.</p>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Select the winner of each knockout match to score brackets and seed the next round. Use <strong>Auto-fill</strong> to pull match results from live data (winners are derived from penalties → extra time → full time) and advance winners through the bracket, then <strong>review and Save</strong>. Save group results first.</p>
       <div class="abgrid" id="admin-bracket"></div>
-      <button class="btn-s" style="margin-top:1rem" onclick="saveAdminBracket()">Save Bracket Results</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;align-items:center">
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="autoFillKnockout()">⚡ Auto-fill from live results</button>
+        <button class="btn-s" onclick="saveAdminBracket()">Save Bracket Results</button>
+      </div>
     </div>
 
     <div class="asec">
@@ -1798,6 +1804,258 @@ function renderAdminBracket() {
       wrap.appendChild(card);
     }
   });
+}
+
+// ══════════════════════════════════════════════
+// AUTO-FILL FROM LIVE DATA (openfootball feed)
+// Pre-fills the admin dropdowns; admin reviews and Saves.
+// Nothing is committed to Firestore until Save is clicked.
+// ══════════════════════════════════════════════
+const CANONICAL_TEAMS = Object.values(GROUPS).flat();
+const TEAM_ALIASES = {
+  'turkey':'Türkiye','turkiye':'Türkiye',
+  'korea republic':'South Korea','republic of korea':'South Korea','korea, republic of':'South Korea',
+  'ir iran':'Iran',
+  "cote d'ivoire":'Ivory Coast','côte d’ivoire':'Ivory Coast',
+  'czechia':'Czech Republic',
+  'congo dr':'DR Congo','democratic republic of the congo':'DR Congo','dr congo':'DR Congo','congo':'DR Congo',
+  'cabo verde':'Cape Verde',
+  'united states':'USA','united states of america':'USA',
+  'bosnia and herzegovina':'Bosnia & Herzegovina','bosnia-herzegovina':'Bosnia & Herzegovina'
+};
+function stripDiacritics(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normalizeTeam(name) {
+  if (!name) return null;
+  const raw = String(name).trim();
+  if (CANONICAL_TEAMS.includes(raw)) return raw;
+  const key = stripDiacritics(raw.toLowerCase());
+  if (TEAM_ALIASES[key]) return TEAM_ALIASES[key];
+  const hit = CANONICAL_TEAMS.find(t => stripDiacritics(t.toLowerCase()) === key);
+  return hit || null; // null = placeholder / unknown team
+}
+function isRealTeam(name){ return normalizeTeam(name) !== null; }
+
+// Fetch the latest feed (forces fresh copy for accuracy)
+async function fetchFreshSchedule() {
+  try {
+    const resp = await fetch(SCORES_DATA_URL + '?_=' + Date.now());
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    scheduleData = json.matches || [];
+    scoresLastFetch = Date.now();
+    return scheduleData;
+  } catch(e) { return null; }
+}
+
+// ── GROUP STANDINGS ──
+function computeGroupStandings(gid, matches) {
+  const table = {};
+  GROUPS[gid].forEach(t => table[t] = { team:t, pts:0, gf:0, ga:0, gd:0, played:0 });
+  const groupMatches = matches.filter(m =>
+    m.group === ('Group ' + gid) && m.score && m.score.ft &&
+    isRealTeam(m.team1) && isRealTeam(m.team2)
+  );
+  groupMatches.forEach(m => {
+    const a = normalizeTeam(m.team1), b = normalizeTeam(m.team2);
+    if (!table[a] || !table[b]) return;
+    const [s1, s2] = m.score.ft;
+    table[a].gf += s1; table[a].ga += s2; table[a].played++;
+    table[b].gf += s2; table[b].ga += s1; table[b].played++;
+    if (s1 > s2) table[a].pts += 3;
+    else if (s2 > s1) table[b].pts += 3;
+    else { table[a].pts++; table[b].pts++; }
+  });
+  Object.values(table).forEach(r => r.gd = r.gf - r.ga);
+  let rows = Object.values(table).sort((x,y) => y.pts - x.pts || y.gd - x.gd || y.gf - x.gf);
+  rows = applyHeadToHead(rows, groupMatches);
+  return { order: rows.map(r => r.team), played: groupMatches.length, complete: groupMatches.length >= 6 };
+}
+
+// Break ties (equal pts/gd/gf) using head-to-head among the tied teams
+function applyHeadToHead(rows, groupMatches) {
+  const out = [];
+  let i = 0;
+  while (i < rows.length) {
+    let j = i;
+    while (j + 1 < rows.length &&
+           rows[j+1].pts === rows[i].pts &&
+           rows[j+1].gd === rows[i].gd &&
+           rows[j+1].gf === rows[i].gf) j++;
+    if (j > i) {
+      const tied = rows.slice(i, j + 1);
+      const names = new Set(tied.map(r => r.team));
+      const mini = {};
+      tied.forEach(r => mini[r.team] = { pts:0, gd:0, gf:0 });
+      groupMatches.forEach(m => {
+        const a = normalizeTeam(m.team1), b = normalizeTeam(m.team2);
+        if (names.has(a) && names.has(b)) {
+          const [s1, s2] = m.score.ft;
+          mini[a].gf += s1; mini[b].gf += s2;
+          mini[a].gd += (s1 - s2); mini[b].gd += (s2 - s1);
+          if (s1 > s2) mini[a].pts += 3; else if (s2 > s1) mini[b].pts += 3; else { mini[a].pts++; mini[b].pts++; }
+        }
+      });
+      tied.sort((x,y) => mini[y.team].pts - mini[x.team].pts || mini[y.team].gd - mini[x.team].gd || mini[y.team].gf - mini[x.team].gf);
+      tied.forEach(r => out.push(r));
+    } else {
+      out.push(rows[i]);
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
+async function autoFillGroupResults() {
+  toast('Fetching live results…');
+  const matches = await fetchFreshSchedule();
+  if (!matches) { toast('Could not load live data — check connection', true); return; }
+  let filled = 0, incomplete = 0;
+  Object.keys(GROUPS).forEach(gid => {
+    const s = computeGroupStandings(gid, matches);
+    if (s.played === 0) return;
+    s.order.forEach((team, idx) => {
+      const el = document.getElementById(`ag-${gid}-${idx+1}`);
+      if (el) el.value = team;
+    });
+    filled++;
+    if (!s.complete) incomplete++;
+  });
+  if (!filled) { toast('No completed group matches found yet', true); return; }
+  toast(incomplete
+    ? `Pre-filled ${filled} group(s) — ${incomplete} not finished yet. Review & Save.`
+    : `Pre-filled ${filled} group(s). Review & Save.`);
+}
+
+// ── KNOCKOUT ──
+function deriveKnockoutWinner(m) {
+  if (!m || !m.score) return null;
+  const sc = m.score;
+  if (Array.isArray(sc.p)  && sc.p[0] !== sc.p[1])   return sc.p[0]  > sc.p[1]  ? m.team1 : m.team2;
+  if (Array.isArray(sc.et) && sc.et[0] !== sc.et[1]) return sc.et[0] > sc.et[1] ? m.team1 : m.team2;
+  if (Array.isArray(sc.ft) && sc.ft[0] !== sc.ft[1]) return sc.ft[0] > sc.ft[1] ? m.team1 : m.team2;
+  return null; // not finished, or tie with no shootout recorded
+}
+
+function classifyKnockoutRound(roundStr) {
+  if (!roundStr) return null;
+  const s = roundStr.toLowerCase();
+  if (s.includes('third') || s.includes('3rd')) return null; // skip 3rd-place playoff
+  if (s.includes('32')) return 'r32';
+  if (s.includes('16')) return 'r16';
+  if (s.includes('quarter') || s.includes('qf')) return 'qf';
+  if (s.includes('semi') || s.includes('sf')) return 'sf';
+  if (s.includes('final')) return 'f';
+  return null;
+}
+
+// Rebuild a winner <select>'s options to the given two teams, then set winner
+function setWinnerSelect(key, t1, t2, winner) {
+  const sel = document.getElementById('abr-' + key);
+  if (!sel) return;
+  const teams = [t1, t2].filter(Boolean);
+  sel.innerHTML = '<option value="">— Winner —</option>' +
+    teams.map(t => `<option value="${t}" ${winner===t?'selected':''}>${t}</option>`).join('');
+  if (winner) sel.value = winner;
+}
+function setTeamSelect(id, value) {
+  const el = document.getElementById(id);
+  if (el && value) el.value = value;
+}
+
+async function autoFillKnockout() {
+  await loadOfficialData();
+  const groupResults = officialData.groupResults || {};
+  if (!Object.keys(groupResults).length) {
+    toast('Save group results first — bracket teams come from those', true);
+    return;
+  }
+  toast('Fetching live results…');
+  const matches = await fetchFreshSchedule();
+  if (!matches) { toast('Could not load live data — check connection', true); return; }
+
+  // All knockout matches (group matches carry a "group" field)
+  const feedKO = matches.filter(m => !m.group && isRealTeam(m.team1) && isRealTeam(m.team2));
+
+  // Find a KO match in a given round that contains a specific team
+  function findByTeam(roundClass, team) {
+    return feedKO.find(m =>
+      classifyKnockoutRound(m.round) === roundClass &&
+      (normalizeTeam(m.team1) === team || normalizeTeam(m.team2) === team)
+    );
+  }
+  // Find a KO match in a round between a specific pair of teams
+  function findByPair(roundClass, a, b) {
+    return feedKO.find(m => {
+      if (classifyKnockoutRound(m.round) !== roundClass) return false;
+      const x = normalizeTeam(m.team1), y = normalizeTeam(m.team2);
+      return (x === a && y === b) || (x === b && y === a);
+    });
+  }
+
+  let resolvedWinners = 0, resolvedMatches = 0;
+
+  // ── Round of 32 ── anchor on the known group-position team in each slot,
+  // read the actual opponent (incl. best-3rd-place teams) from the feed.
+  let prev = []; // results indexed by slot: { t1, t2, winner }
+  for (let i = 0; i < 16; i++) {
+    const seed = R32_SEEDING[i];
+    const known1 = resolveTeam(seed.t1, groupResults);
+    const known2 = resolveTeam(seed.t2, groupResults);
+    const anchors = [known1, known2].filter(t => t && isRealTeam(t)).map(normalizeTeam);
+
+    let feedMatch = null;
+    for (const anchor of anchors) {
+      feedMatch = findByTeam('r32', anchor);
+      if (feedMatch) break;
+    }
+
+    if (feedMatch) {
+      const a = normalizeTeam(feedMatch.team1), b = normalizeTeam(feedMatch.team2);
+      setTeamSelect(`abs-r32-${i}-t1`, a);
+      setTeamSelect(`abs-r32-${i}-t2`, b);
+      const w = normalizeTeam(deriveKnockoutWinner(feedMatch));
+      setWinnerSelect(`r32_${i}`, a, b, w);
+      prev[i] = { t1:a, t2:b, winner:w };
+      resolvedMatches++;
+      if (w) resolvedWinners++;
+    } else {
+      // Couldn't find in feed yet — still fill any known team
+      if (known1 && isRealTeam(known1)) setTeamSelect(`abs-r32-${i}-t1`, normalizeTeam(known1));
+      if (known2 && isRealTeam(known2)) setTeamSelect(`abs-r32-${i}-t2`, normalizeTeam(known2));
+      prev[i] = { t1: known1 ? normalizeTeam(known1) : null, t2: known2 ? normalizeTeam(known2) : null, winner:null };
+    }
+  }
+
+  // ── Later rounds ── advance winners using standard bracket adjacency
+  // (slot i of next round = winners of slots 2i and 2i+1 of previous round),
+  // which matches how the player-facing bracket is laid out.
+  ['r16','qf','sf','f'].forEach(rid => {
+    const round = ROUNDS.find(r => r.id === rid);
+    const cur = [];
+    for (let i = 0; i < round.matches; i++) {
+      const a = (prev[2*i]     || {}).winner || null;
+      const b = (prev[2*i + 1] || {}).winner || null;
+      if (a) setTeamSelect(`abs-${rid}-${i}-t1`, a);
+      if (b) setTeamSelect(`abs-${rid}-${i}-t2`, b);
+      if (a && b) {
+        const feedMatch = findByPair(rid, a, b);
+        const w = feedMatch ? normalizeTeam(deriveKnockoutWinner(feedMatch)) : null;
+        setWinnerSelect(`${rid}_${i}`, a, b, w);
+        cur[i] = { t1:a, t2:b, winner:w };
+        resolvedMatches++;
+        if (w) resolvedWinners++;
+      } else {
+        cur[i] = { t1:a, t2:b, winner:null };
+      }
+    }
+    prev = cur;
+  });
+
+  if (!resolvedMatches) {
+    toast('No knockout matchups available in the feed yet', true);
+  } else {
+    toast(`Pre-filled ${resolvedMatches} matchup(s), ${resolvedWinners} winner(s). Review & Save.`);
+  }
 }
 
 async function saveAdminGroups() {
