@@ -715,6 +715,15 @@ body { font-family: var(--fb); background: var(--dark); color: var(--text); min-
         <button class="btn-unlock" onclick="setLock('bracket', false)">🔓 Unlock Bracket Picks</button>
       </div>
     </div>
+
+    <div class="asec">
+      <h3>💾 Backup — Export Everyone's Picks</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Once picks are locked, download a complete copy of every player's picks. Keep the file somewhere safe — if the database ever goes down, you'll still have a full record. The <strong>JSON</strong> is a restorable backup; the <strong>HTML snapshot</strong> is a readable, printable page that works offline.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-s" onclick="exportAllPicksJSON()">⬇ Download full backup (JSON)</button>
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="exportAllPicksHTML()">⬇ Download readable snapshot (HTML)</button>
+      </div>
+    </div>
   </div>
 
 </div><!-- /main -->
@@ -2101,6 +2110,128 @@ async function setLock(type, locked) {
   await db.collection('official').doc('results').set({ [field]: locked }, { merge: true });
   await loadOfficialData();
   toast(`${type === 'groups' ? 'Group' : 'Bracket'} picks ${locked ? 'locked 🔒' : 'unlocked 🔓'}`);
+}
+
+// ══════════════════════════════════════════════
+// BACKUP / EXPORT (admin only)
+// Downloads a copy of every player's picks so the pool
+// survives even if the database becomes unavailable.
+// ══════════════════════════════════════════════
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function backupStamp() {
+  return new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+}
+
+async function exportAllPicksJSON() {
+  if (!isAdmin()) return;
+  toast('Building backup…');
+  try {
+    const snap = await db.collection('users').get();
+    const users = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      users.push({
+        uid: doc.id,
+        displayName: d.displayName || '',
+        email: d.email || '',
+        paid: !!d.paid,
+        tiebreaker: (d.tiebreaker != null ? d.tiebreaker : null),
+        picks: d.picks || {},
+        bracketPicks: d.bracketPicks || {}
+      });
+    });
+    await loadOfficialData();
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      poolName: 'World Cup 2026 Picks',
+      playerCount: users.length,
+      note: 'Full restorable backup. officialData holds entered results; users holds every player\'s picks.',
+      officialData: officialData || {},
+      users
+    };
+    downloadFile(`wc2026-picks-backup-${backupStamp()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    toast(`Backup saved — ${users.length} players ✓`);
+  } catch(e) { toast('Export error: ' + e.message, true); }
+}
+
+async function exportAllPicksHTML() {
+  if (!isAdmin()) return;
+  toast('Building snapshot…');
+  try {
+    const snap = await db.collection('users').get();
+    await loadOfficialData();
+    const players = [];
+    snap.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
+    players.sort((a,b) => (a.displayName||a.email||'').localeCompare(b.displayName||b.email||''));
+
+    const roundNames = { r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', f:'Final' };
+    let body = '';
+    players.forEach(p => {
+      body += `<div class="player"><h2>${esc(p.displayName || p.email || 'Unknown')}</h2>`;
+      body += `<div class="meta">${esc(p.email||'')} &middot; Entry fee: ${p.paid ? 'PAID' : 'unpaid'}${p.tiebreaker != null ? ` &middot; Final goals guess: ${esc(p.tiebreaker)}` : ''}</div>`;
+      body += `<h3>Group Stage</h3><div class="groups">`;
+      Object.keys(GROUPS).forEach(gid => {
+        const order = (p.picks && p.picks[gid]) ? p.picks[gid] : GROUPS[gid];
+        body += `<div class="grp"><div class="gh">Group ${gid}</div><ol>` + order.map(t => `<li>${esc(t)}</li>`).join('') + `</ol></div>`;
+      });
+      body += `</div>`;
+      const bp = p.bracketPicks || {};
+      body += `<h3>Bracket Picks</h3>`;
+      if (!Object.keys(bp).length) {
+        body += `<p class="none">No bracket picks submitted.</p>`;
+      } else {
+        body += `<div class="bracket">`;
+        ROUNDS.forEach(r => {
+          const picks = [];
+          for (let i = 0; i < r.matches; i++) { const k = r.id + '_' + i; if (bp[k]) picks.push(`M${i+1}: ${esc(bp[k])}`); }
+          if (picks.length) body += `<div class="br"><div class="brh">${roundNames[r.id]}</div>${picks.map(x => `<div>${x}</div>`).join('')}</div>`;
+        });
+        body += `</div>`;
+      }
+      body += `</div>`;
+    });
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WC2026 Picks Snapshot</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#1a1f17;background:#fff}
+h1{border-bottom:3px solid #1a6b3a;padding-bottom:.4rem;color:#0d1b12}
+.sub{color:#666;font-size:13px;margin-bottom:2rem}
+.player{border:1px solid #ddd;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;page-break-inside:avoid}
+.player h2{margin:0 0 .2rem;color:#1a6b3a}
+.meta{font-size:12px;color:#777;margin-bottom:.75rem}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#888;margin:1rem 0 .4rem}
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
+.grp{border:1px solid #eee;border-radius:6px;overflow:hidden}
+.gh{background:#1a6b3a;color:#fff;font-size:11px;font-weight:700;padding:3px 8px}
+.grp ol{margin:0;padding:4px 4px 4px 26px;font-size:12px}
+.grp li{padding:1px 0}
+.grp li:nth-child(-n+2){font-weight:700}
+.bracket{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.5rem;font-size:12px}
+.br{border:1px solid #eee;border-radius:6px;padding:6px 8px}
+.brh{font-weight:700;color:#1a6b3a;font-size:11px;margin-bottom:3px}
+.none{color:#999;font-size:12px}
+@media print{.player{border-color:#ccc}body{margin:0}}
+</style></head><body>
+<h1>&#127942; World Cup 2026 — Picks Snapshot</h1>
+<div class="sub">Exported ${esc(new Date().toLocaleString())} &middot; ${players.length} players &middot; Read-only backup. Open in any browser; use your browser's Print &rarr; Save as PDF to archive. Top 2 in each group are bolded.</div>
+${body}
+</body></html>`;
+    downloadFile(`wc2026-picks-snapshot-${backupStamp()}.html`, html, 'text/html');
+    toast(`Snapshot saved — ${players.length} players ✓`);
+  } catch(e) { toast('Export error: ' + e.message, true); }
 }
 
 // ══════════════════════════════════════════════
