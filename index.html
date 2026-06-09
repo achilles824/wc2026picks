@@ -679,6 +679,16 @@ body { font-family: var(--fb); background: var(--dark); color: var(--text); min-
     </div>
 
     <div class="asec">
+      <h3>📣 Email Everyone</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Send a group announcement using the emails players signed up with. Both options open your own email app with you as the To recipient — just type your message and send. <strong>BCC</strong> keeps everyone's address private from each other (best for announcements). <strong>CC</strong> shows all addresses so people can reply-all (best for a group conversation). If your mail app doesn't open, use <strong>Copy all addresses</strong> and paste them in yourself.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="emailAllPlayers('bcc')">✉ Group email — BCC (private)</button>
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="emailAllPlayers('cc')">✉ Group email — CC (visible)</button>
+        <button class="btn-s" onclick="copyAllEmails()">📋 Copy all addresses</button>
+      </div>
+    </div>
+
+    <div class="asec">
       <h3>💰 Payment Status</h3>
       <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Mark players as paid after confirming their Venmo payment.</p>
       <div class="pay-grid" id="pay-admin-grid"></div>
@@ -2241,6 +2251,53 @@ ${body}
     downloadFile(`wc2026-picks-snapshot-${backupStamp()}.html`, html, 'text/html');
     toast(`Snapshot saved — ${players.length} players ✓`);
   } catch(e) { toast('Export error: ' + e.message, true); }
+}
+
+// ══════════════════════════════════════════════
+// EMAIL EVERYONE (admin only) — opens admin's own mail client
+// with all players BCC'd. No backend / no API keys / addresses
+// stay private from each other.
+// ══════════════════════════════════════════════
+async function getAllPlayerEmails() {
+  const snap = await db.collection('users').get();
+  const emails = [];
+  snap.forEach(doc => { const e = (doc.data().email || '').trim(); if (e) emails.push(e); });
+  return [...new Set(emails)]; // de-dupe
+}
+
+async function emailAllPlayers(mode) {
+  if (!isAdmin()) return;
+  mode = (mode === 'cc') ? 'cc' : 'bcc';
+  toast('Gathering addresses…');
+  try {
+    const emails = await getAllPlayerEmails();
+    if (!emails.length) { toast('No player emails found', true); return; }
+    const to = currentUser.email || '';
+    const subject = encodeURIComponent('World Cup 2026 Pool');
+    const list = encodeURIComponent(emails.join(','));
+    const href = `mailto:${encodeURIComponent(to)}?${mode}=${list}&subject=${subject}`;
+    const a = document.createElement('a');
+    a.href = href;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast(`Opening ${mode.toUpperCase()} email to ${emails.length} player(s)…`);
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function copyAllEmails() {
+  if (!isAdmin()) return;
+  try {
+    const emails = await getAllPlayerEmails();
+    if (!emails.length) { toast('No player emails found', true); return; }
+    const text = emails.join(', ');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`Copied ${emails.length} addresses ✓`);
+    } catch(_) {
+      window.prompt('Copy these addresses (Ctrl/Cmd+C):', text);
+    }
+  } catch(e) { toast('Error: ' + e.message, true); }
 }
 
 // ══════════════════════════════════════════════
