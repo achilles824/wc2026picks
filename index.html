@@ -438,6 +438,15 @@ body { font-family: var(--fb); background: var(--dark); color: var(--text); min-
 .board-send-btn:hover { background: var(--green-mid); }
 .board-empty { text-align: center; color: #555; font-size: 14px; font-weight: 500; padding: 2rem; }
 
+/* In-message links + YouTube thumbnail cards */
+.board-link { color: var(--green); text-decoration: underline; word-break: break-all; }
+.board-msg.mine .board-text .board-link { color: #e6fff0; }
+.yt-card { display: block; margin-top: 8px; width: 100%; max-width: 280px; border-radius: 10px; overflow: hidden; position: relative; text-decoration: none; }
+.yt-thumb { display: block; width: 100%; aspect-ratio: 16 / 9; background-size: cover; background-position: center; background-color: #000; position: relative; }
+.yt-play { position: absolute; inset: 0; margin: auto; width: 48px; height: 34px; background: rgba(0,0,0,.7); border-radius: 9px; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+.yt-card:hover .yt-play { background: var(--red); }
+.yt-title { font-size: 11px; color: var(--muted); padding: 5px 2px 0; }
+
 .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--green); color: #fff; padding: 10px 24px; border-radius: 30px; font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: all .3s; z-index: 9999; white-space: nowrap; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { background: var(--red); }
@@ -2268,7 +2277,7 @@ function renderBoardMessage(msg, containerId, isMine, isAdminMsg) {
   bubble.className = 'board-bubble';
   bubble.innerHTML = `
     <div class="board-meta">${isAdminMsg ? '⚙ ' : ''}${msg.displayName} · ${timeAgo(msg.createdAt)}</div>
-    <div class="board-text">${msg.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+    <div class="board-text">${renderMessageText(msg.text)}</div>
   `;
   el.appendChild(av);
   el.appendChild(bubble);
@@ -2278,6 +2287,40 @@ function renderBoardMessage(msg, containerId, isMine, isAdminMsg) {
 function scrollToBottom(id) {
   const el = document.getElementById(id);
   if (el) el.scrollTop = el.scrollHeight;
+}
+
+// Extract a YouTube video ID from common URL shapes, or null
+function youtubeId(url) {
+  const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Turn raw message text into safe HTML: escape everything, make URLs
+// clickable, and append a thumbnail card for any YouTube links.
+function renderMessageText(raw) {
+  const text = String(raw == null ? '' : raw);
+  const urlRe = /(https?:\/\/[^\s]+)/g;
+  let out = '', last = 0, m;
+  const ytIds = [];
+  while ((m = urlRe.exec(text)) !== null) {
+    out += esc(text.slice(last, m.index)).replace(/\n/g, '<br>');
+    let url = m[0], trail = '';
+    const tm = url.match(/[)\]\.,!?;:'"]+$/); // don't swallow trailing punctuation
+    if (tm) { trail = tm[0]; url = url.slice(0, -trail.length); }
+    const safeUrl = esc(url);
+    out += `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer nofollow" class="board-link">${safeUrl}</a>`;
+    out += esc(trail);
+    const id = youtubeId(url);
+    if (id && !ytIds.includes(id)) ytIds.push(id);
+    last = m.index + m[0].length;
+  }
+  out += esc(text.slice(last)).replace(/\n/g, '<br>');
+  ytIds.forEach(id => {
+    out += `<a href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener noreferrer" class="yt-card">` +
+           `<span class="yt-thumb" style="background-image:url('https://i.ytimg.com/vi/${id}/hqdefault.jpg')">` +
+           `<span class="yt-play">&#9654;</span></span></a>`;
+  });
+  return out;
 }
 
 async function renderBoard() {
