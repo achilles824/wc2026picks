@@ -3,18 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>World Cup 2026 Beer Tracker</title>
+<title>World Cup 2026 Picks</title>
 
+<!--
+  ══════════════════════════════════════════════════════
+  STEP 1: Go to console.firebase.google.com
+          Create a project → Firestore Database → Create database (test mode)
+          Project Settings → Add Web App → copy config values below
+
+  STEP 2: Paste your Firebase config here:
+  ══════════════════════════════════════════════════════
+-->
 <script>
-  // ── Paste your same Firebase config from the pool site ──
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyBnbqn5BKYYSKRvRupTSyNLM-vN6Fvnn-k",
     authDomain: "world-cup-2026-pool-29c25.firebaseapp.com",
     projectId: "world-cup-2026-pool-29c25"
   };
+
+  // Commissioner emails — get the Admin tab automatically
+  const ADMIN_EMAIL = "achilles824@gmail.com";
+  const ADMIN_EMAIL_2 = "calsharkey@gmail.com";
+
+  // Your Venmo username (without @) — shown to players on the payment screen
+  const VENMO_USERNAME = "CallieRitterTX";
+
+  // Entry fee amount
+  const ENTRY_FEE = 50;
+
+  // ── SCORES DATA SOURCE ──────────────────────────────
+  // Free community-updated data from openfootball (no API key needed).
+  // Scores are updated manually by volunteers, typically within ~1 hour
+  // after a match ends. This is NOT a live in-match feed.
+  // To upgrade to a live API, replace the fetch URL in loadScheduleData().
+  const SCORES_DATA_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
+  // ────────────────────────────────────────────────────
 </script>
+<!-- ══════════════════════════════════════════════════════ -->
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
@@ -27,472 +55,2420 @@
   --border: rgba(0,0,0,0.12); --r: 10px;
   --fd: 'Bebas Neue', sans-serif; --fb: 'DM Sans', sans-serif;
 }
-body { font-family: var(--fb); background: var(--dark); color: var(--text); min-height: 100vh; }
+body { font-family: var(--fb); background: var(--dark); color: var(--text); min-height: 100vh; color-scheme: light; }
 
-.hdr {
-  background: var(--dark); padding: .8rem 1.5rem;
-  display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 2px solid var(--green); position: sticky; top: 0; z-index: 100;
-  flex-wrap: wrap; gap: 8px;
-}
+/* HEADER */
+.hdr { background: var(--dark); padding: .8rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--green); position: sticky; top: 0; z-index: 100; flex-wrap: wrap; gap: 8px; }
 .logo { font-family: var(--fd); font-size: 1.5rem; color: #fff; letter-spacing: 2px; }
 .logo span { color: var(--gold); }
-.back-btn {
-  background: transparent; border: 1px solid rgba(255,255,255,.2);
-  color: rgba(255,255,255,.6); padding: 6px 13px; border-radius: 6px;
-  cursor: pointer; font-family: var(--fb); font-size: 13px; font-weight: 500;
-  text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
-  transition: all .15s;
-}
-.back-btn:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+.nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.nav-btn { background: transparent; border: 1px solid rgba(255,255,255,.15); color: rgba(255,255,255,.65); padding: 6px 13px; border-radius: 6px; cursor: pointer; font-family: var(--fb); font-size: 13px; font-weight: 500; transition: all .15s; }
+.nav-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+.nav-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+.ubar { display: flex; align-items: center; gap: 8px; }
+.uname { color: rgba(255,255,255,.6); font-size: 13px; }
+.ubadge { background: transparent; border: 1px solid rgba(255,255,255,.2); color: rgba(255,255,255,.6); padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 12px; transition: all .15s; }
+.ubadge:hover { color: #fff; border-color: rgba(255,255,255,.5); }
+.abadge { background: var(--gold); color: var(--dark); border: none; padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 12px; font-weight: 700; font-family: var(--fb); }
 
-.main { padding: 1.5rem; max-width: 760px; margin: 0 auto; }
+/* PAYMENT BANNER */
+.pay-banner { background: rgba(192,57,43,.15); border: 1px solid rgba(192,57,43,.5); border-radius: 8px; padding: .75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pay-banner p { color: rgba(255,255,255,.85); font-size: 13px; }
+.pay-banner strong { color: #ff8a80; }
+.btn-pay { background: #5f4fcf; color: #fff; border: none; padding: 7px 18px; border-radius: 20px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--fb); white-space: nowrap; }
+.btn-pay:hover { background: #7c6fd4; }
+.pay-ok { background: rgba(26,107,58,.2); border: 1px solid rgba(26,107,58,.5); border-radius: 8px; padding: .6rem 1rem; margin-bottom: 1.25rem; color: #69db7c; font-size: 13px; }
 
-/* Progress bar */
-.progress-card {
-  background: var(--surface); border-radius: var(--r);
-  padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
-  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
-}
-.progress-text { flex: 1; min-width: 160px; }
-.progress-title { font-family: var(--fd); font-size: 1.8rem; color: var(--dark); letter-spacing: 2px; line-height: 1; }
-.progress-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
-.progress-bar-wrap { flex: 2; min-width: 180px; }
-.progress-bar-track { height: 10px; background: var(--surface2); border-radius: 5px; overflow: hidden; margin-bottom: 6px; }
-.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--green-mid)); border-radius: 5px; transition: width .4s ease; }
-.progress-pct { font-size: 13px; font-weight: 600; color: var(--green); }
-.ring-wrap { text-align: center; }
-.ring-num { font-family: var(--fd); font-size: 2.2rem; color: var(--green); line-height: 1; }
-.ring-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-
-/* Filters */
-.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1.25rem; }
-.filter-btn {
-  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15);
-  color: rgba(255,255,255,.65); padding: 6px 14px; border-radius: 20px;
-  cursor: pointer; font-family: var(--fb); font-size: 12px; font-weight: 500;
-  transition: all .15s; white-space: nowrap;
-}
-.filter-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
-.filter-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
-
-/* Group header */
-.group-hdr {
-  font-family: var(--fd); font-size: 1rem; letter-spacing: 1.5px;
-  color: var(--gold); padding: 6px 0; margin: 1.25rem 0 .5rem;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
-
-/* Beer card */
-.beer-card {
-  background: var(--surface); border-radius: var(--r);
-  padding: 12px 14px; margin-bottom: 8px;
-  display: flex; align-items: flex-start; gap: 12px;
-  border: 1.5px solid transparent; transition: all .2s;
-  border-left: 4px solid transparent;
-}
-.beer-card.done { background: #e8f5ee; border-color: transparent; border-left-color: var(--green); }
-.beer-card:hover { border-color: rgba(45,158,95,.25); }
-.beer-card.done:hover { border-color: rgba(45,158,95,.4); }
-
-.check-btn {
-  width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
-  border: 2px solid var(--border); background: #fff;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 14px; transition: all .15s; margin-top: 2px;
-}
-.beer-card.done .check-btn { background: var(--green); border-color: var(--green); color: #fff; }
-
-.beer-flag { font-size: 24px; flex-shrink: 0; line-height: 1.2; }
-
-.beer-info { flex: 1; min-width: 0; }
-.beer-name {
-  font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 2px;
-  transition: all .15s;
-}
-.beer-card.done .beer-name { text-decoration: line-through; color: var(--muted); }
-.beer-meta { font-size: 12px; color: var(--muted); }
-.beer-where {
-  display: inline-block; margin-top: 4px; font-size: 11px;
-  background: var(--surface2); color: var(--muted); padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.note-area { margin-top: 8px; }
-.note-display {
-  font-size: 12px; color: var(--muted); font-style: italic;
-  background: var(--surface2); padding: 6px 10px; border-radius: 6px;
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
-}
-.note-display span { flex: 1; }
-.note-edit-row { display: flex; gap: 6px; margin-top: 6px; }
-.note-input {
-  flex: 1; padding: 7px 10px; border: 1.5px solid var(--border);
-  border-radius: 6px; font-family: var(--fb); font-size: 13px;
-  background: #fff; outline: none; color: var(--text);
-}
-.note-input:focus { border-color: var(--green); }
-.btn-sm {
-  padding: 6px 12px; border-radius: 6px; font-family: var(--fb);
-  font-size: 12px; font-weight: 600; cursor: pointer; border: none;
-  white-space: nowrap;
-}
-.btn-save { background: var(--green); color: #fff; }
-.btn-cancel { background: var(--surface2); color: var(--muted); }
-.note-btn {
-  background: transparent; border: 1px solid var(--border);
-  color: var(--muted); padding: 4px 8px; border-radius: 6px;
-  font-size: 11px; cursor: pointer; font-family: var(--fb);
-  flex-shrink: 0; transition: all .15s; margin-top: 2px;
-}
-.note-btn:hover { border-color: var(--green); color: var(--green); }
-
-/* Sync status */
-.sync-bar {
-  text-align: center; font-size: 11px; padding: 10px;
-  color: rgba(255,255,255,.3); margin-top: 1rem;
-}
-.sync-bar.syncing { color: var(--gold); }
-.sync-bar.error { color: var(--red); }
-
-/* Toast */
-.toast {
-  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
-  background: var(--green); color: #fff; padding: 10px 24px; border-radius: 30px;
-  font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none;
-  transition: all .3s; z-index: 9999; white-space: nowrap;
-}
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-/* Win banner */
-.win-banner {
-  background: linear-gradient(135deg, #1a6b3a, #2d9e5f);
-  border-radius: var(--r); padding: 2rem; text-align: center;
-  margin-bottom: 1.5rem; display: none;
-}
-.win-banner.show { display: block; }
-.win-banner h2 { font-family: var(--fd); font-size: 2.5rem; color: #fff; letter-spacing: 2px; }
-.win-banner p { color: rgba(255,255,255,.8); font-size: 14px; margin-top: 6px; }
-
+/* MAIN */
+.main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+.page { display: none; }
+.page.active { display: block; }
 .spin-wrap { text-align: center; padding: 4rem; color: rgba(255,255,255,.4); font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
 .spinner { width: 32px; height: 32px; border: 3px solid rgba(255,255,255,.1); border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* LOGIN */
+.lwrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; }
+.lcard { background: var(--surface); border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 380px; text-align: center; }
+.trophy { font-size: 3rem; margin-bottom: 1rem; }
+.ltitle { font-family: var(--fd); font-size: 2rem; color: var(--dark); letter-spacing: 2px; margin-bottom: .25rem; }
+.lsub { color: var(--muted); font-size: 14px; margin-bottom: 1.5rem; }
+.linput { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 8px; font-family: var(--fb); font-size: 15px; margin-bottom: 10px; background: #fff; }
+.linput:focus { outline: none; border-color: var(--green); }
+.btn-p { width: 100%; padding: 11px; background: var(--green); color: #fff; border: none; border-radius: 8px; font-family: var(--fb); font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s; margin-top: 4px; }
+.btn-p:hover { background: var(--green-mid); }
+.slink { color: var(--green); cursor: pointer; font-size: 13px; margin-top: 1rem; display: block; }
+.lerr { color: #c0392b; font-size: 13px; margin-top: 8px; min-height: 20px; }
+.fb-warn { background: #fff3cd; border-radius: 8px; padding: 12px; margin-bottom: 1rem; font-size: 12px; line-height: 1.6; text-align: left; }
+
+/* SECTION */
+.stitle { font-family: var(--fd); font-size: 1.8rem; color: #fff; letter-spacing: 2px; margin-bottom: .2rem; }
+.ssub { color: rgba(255,255,255,.5); font-size: 13px; margin-bottom: 1.5rem; }
+.ssub strong { color: var(--gold-l); }
+
+/* FLAG IMAGES */
+.fi { display: inline-block; width: 22px; height: 16px; border-radius: 2px; background-size: cover; background-position: center; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(0,0,0,.1); }
+.bfi { display: inline-block; width: 18px; height: 13px; border-radius: 2px; background-size: cover; background-position: center; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(0,0,0,.1); }
+
+/* GROUPS */
+.ggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(265px, 1fr)); gap: 1rem; }
+.gcard { background: var(--surface); border-radius: var(--r); overflow: hidden; }
+.ghdr { background: var(--green); color: #fff; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+.gname { font-family: var(--fd); font-size: 1.2rem; letter-spacing: 1px; }
+.ghint { font-size: 11px; opacity: .75; }
+.tlist { padding: 8px; }
+.trow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; background: #fff; margin-bottom: 4px; cursor: grab; border: 1.5px solid transparent; transition: all .1s; user-select: none; -webkit-user-select: none; touch-action: none; }
+.trow:active { cursor: grabbing; }
+.trow.dragging { opacity: .35; }
+.trow.drag-over { border-color: var(--green); background: #f0fff5; }
+.rbadge { width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
+.rbadge.q { background: var(--green); }
+.rbadge.out { background: var(--muted); }
+.tname { font-size: 13px; font-weight: 500; flex: 1; }
+.dhandle { color: var(--muted); font-size: 14px; }
+
+/* TIEBREAKER */
+.tbc { background: var(--surface); border-radius: var(--r); padding: 1.5rem; margin-bottom: 1.5rem; max-width: 440px; }
+.tbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.tbt { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+.tbs { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.tbinput { width: 100px; padding: 10px; font-size: 22px; font-weight: 700; text-align: center; border: 2px solid var(--green); border-radius: 8px; font-family: var(--fb); outline: none; }
+
+/* SAVE BAR */
+.sbar { position: sticky; bottom: 0; background: var(--dark); border-top: 1px solid rgba(255,255,255,.08); padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; gap: 1rem; }
+.sbar-txt { color: rgba(255,255,255,.5); font-size: 13px; }
+.btn-s { background: var(--gold); color: var(--dark); border: none; padding: 10px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; font-family: var(--fb); transition: background .15s; white-space: nowrap; }
+.btn-s:hover { background: var(--gold-l); }
+.btn-s:disabled { opacity: .5; cursor: not-allowed; }
+
+/* BRACKET */
+.bnotice { background: rgba(201,162,39,.12); border: 1px solid rgba(201,162,39,.4); border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; color: rgba(255,255,255,.75); font-size: 13px; line-height: 1.6; }
+.bnotice strong { color: var(--gold); }
+.bscroll { overflow-x: auto; padding-bottom: 1rem; }
+.bcon { display: flex; min-width: 900px; }
+.bround { flex: 1; display: flex; flex-direction: column; }
+.rhdr { text-align: center; padding: 8px 4px 10px; font-family: var(--fd); font-size: 13px; letter-spacing: 1px; color: var(--gold); border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 6px; }
+.rpts { font-size: 10px; color: rgba(255,255,255,.3); display: block; font-family: var(--fb); font-weight: 400; letter-spacing: 0; margin-top: 2px; }
+.mslot { display: flex; flex-direction: column; justify-content: center; }
+.mcard { background: var(--surface2); border-radius: 8px; overflow: hidden; margin: 3px 4px; border: 1.5px solid transparent; transition: border-color .15s; }
+.mcard:hover { border-color: rgba(45,158,95,.4); }
+.bteam { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: pointer; font-size: 12px; font-weight: 500; background: #fff; transition: background .1s; border-bottom: .5px solid #eee; }
+.bteam:last-child { border-bottom: none; }
+.bteam:hover:not(.tbd) { background: #f0fff5; }
+.bteam.sel { background: var(--green) !important; color: #fff; }
+.bteam.tbd { color: #bbb; font-style: italic; cursor: default; }
+.match-label { font-size: 9px; color: rgba(255,255,255,.3); text-align: center; padding: 2px 4px; font-family: var(--fb); letter-spacing: .3px; }
+
+/* LEADERBOARD */
+.lbwrap { background: var(--surface); border-radius: var(--r); overflow: hidden; }
+.lbhdr { background: var(--green); color: #fff; padding: 10px 16px; font-weight: 600; font-size: 13px; display: grid; grid-template-columns: 44px 1fr 50px 55px 55px 55px 65px; gap: 8px; align-items: center; }
+.lbrow { display: grid; grid-template-columns: 44px 1fr 50px 55px 55px 55px 65px; gap: 8px; align-items: center; padding: 10px 16px; border-bottom: .5px solid #eee; background: #fff; font-size: 13px; transition: background .1s; }
+.lbrow:hover { background: #f8fff5; }
+.lbrow.me { background: #e8f5ee; border-left: 3px solid var(--green); }
+.lbrow.unpaid { opacity: .6; }
+.lbrow:last-child { border-bottom: none; }
+.rnum { font-weight: 700; font-size: 16px; color: var(--green); text-align: center; }
+.rnum.g { color: #c9a227; } .rnum.s { color: #888; } .rnum.b { color: #a0522d; }
+.pname { font-weight: 500; }
+.scell { text-align: right; }
+.sval { font-weight: 700; font-size: 15px; color: var(--green); }
+.sscore { text-align: right; color: var(--muted); font-size: 12px; }
+.paid-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+.paid-badge.yes { background: #e8f5ee; color: var(--green); }
+.paid-badge.no { background: #fdecea; color: var(--red); }
+
+/* ══════════════════════════════════════════
+   SCHEDULE / SCORES TAB
+   ══════════════════════════════════════════ */
+.scores-disclaimer {
+  background: rgba(201,162,39,.12);
+  border: 1px solid rgba(201,162,39,.35);
+  border-radius: 10px;
+  padding: .85rem 1.1rem;
+  margin-bottom: 1.25rem;
+  color: rgba(255,255,255,.75);
+  font-size: 13px;
+  line-height: 1.6;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.scores-disclaimer .di { font-size: 18px; flex-shrink: 0; }
+.scores-disclaimer strong { color: var(--gold); }
+
+.scores-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+  align-items: center;
+}
+.filter-btn {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.15);
+  color: rgba(255,255,255,.65);
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: var(--fb);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.filter-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+.filter-btn.active { background: var(--green); border-color: var(--green); color: #fff; }
+.scores-refresh {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.55);
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: var(--fb);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all .15s;
+}
+.scores-refresh:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+.scores-refresh.spinning .refresh-icon { animation: spin .6s linear infinite; display: inline-block; }
+.refresh-icon { display: inline-block; }
+
+.scores-last-updated {
+  font-size: 11px;
+  color: rgba(255,255,255,.3);
+  margin-bottom: 1rem;
+}
+
+/* Day section */
+.scores-day {
+  margin-bottom: 1.5rem;
+}
+.scores-day-hdr {
+  font-family: var(--fd);
+  font-size: 1rem;
+  letter-spacing: 1.5px;
+  color: var(--gold);
+  padding: 6px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.scores-day-hdr .day-label { color: rgba(255,255,255,.4); font-size: .75rem; margin-left: 8px; font-family: var(--fb); font-weight: 500; letter-spacing: 0; }
+
+/* Match card */
+.match-card {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+  border: 1.5px solid transparent;
+  transition: border-color .15s;
+}
+.match-card.finished { border-color: rgba(26,107,58,.25); }
+.match-card.today { border-color: rgba(201,162,39,.4); background: rgba(201,162,39,.05); }
+
+.match-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.match-team.away {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.match-team-name { flex: 1; }
+.match-team.away .match-team-name { text-align: right; }
+
+.match-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 80px;
+}
+.match-score {
+  font-family: var(--fd);
+  font-size: 1.6rem;
+  letter-spacing: 3px;
+  color: var(--dark);
+  background: var(--green);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.match-score.pending {
+  background: rgba(255,255,255,.15);
+  color: rgba(255,255,255,.5);
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+  padding: 5px 10px;
+}
+.match-score.today-score {
+  background: var(--gold);
+  color: var(--dark);
+}
+.match-meta {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.4;
+}
+.match-group-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(26,107,58,.1);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.match-round-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,.5);
+  background: rgba(255,255,255,.08);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.match-ft-label {
+  font-size: 10px;
+  color: var(--green);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+/* No matches state */
+.no-matches {
+  text-align: center;
+  color: rgba(255,255,255,.3);
+  padding: 3rem;
+  font-size: 14px;
+}
+
+/* ADMIN */
+.asec { background: var(--surface); border-radius: var(--r); padding: 1.5rem; margin-bottom: 1.5rem; }
+.asec h3 { font-size: 15px; font-weight: 600; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.aggrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+.agcard { background: #fff; border-radius: 8px; padding: 12px; border: 1px solid var(--border); }
+.agcard h4 { font-size: 13px; font-weight: 600; color: var(--green); margin-bottom: 8px; }
+.agrow { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.agrow label { font-size: 12px; color: var(--muted); width: 14px; font-weight: 600; }
+.agrow select { flex: 1; padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 5px; font-family: var(--fb); background: #fff; cursor: pointer; }
+.abgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.abcard { background: #fff; border-radius: 8px; padding: 10px 12px; border: 1px solid var(--border); }
+.abcard h5 { font-size: 11px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+.abcard label { font-size: 12px; color: var(--text); display: block; margin-bottom: 3px; margin-top: 6px; }
+.abcard select { width: 100%; padding: 5px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 5px; font-family: var(--fb); background: #fff; }
+.lock-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.btn-lock { padding: 8px 18px; background: var(--red); color: #fff; border: none; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; font-family: var(--fb); }
+.btn-unlock { padding: 8px 18px; background: var(--green); color: #fff; border: none; border-radius: 7px; font-weight: 600; font-size: 13px; cursor: pointer; font-family: var(--fb); }
+
+/* PAYMENT ADMIN */
+.pay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.pay-card { background: #fff; border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pay-card .pn { font-size: 13px; font-weight: 500; }
+.pay-card .pe { font-size: 11px; color: var(--muted); }
+.pay-toggle { display: flex; gap: 6px; }
+.btn-paid { padding: 5px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--fb); }
+.btn-paid.yes { background: #e8f5ee; color: var(--green); border: 1.5px solid var(--green); }
+.btn-paid.no { background: #fdecea; color: var(--red); border: 1.5px solid var(--red); }
+.btn-paid.active { color: #fff; }
+.btn-paid.yes.active { background: var(--green); }
+.btn-paid.no.active { background: var(--red); }
+
+.pname-link { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.pname-link:hover { color: var(--green); }
+
+/* PICKS MODAL */
+.picks-modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 600; display: flex; align-items: flex-start; justify-content: center; padding: 1rem; overflow-y: auto; }
+.picks-modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 720px; margin: auto; overflow: hidden; }
+.picks-modal-hdr { background: var(--green); color: #fff; padding: 1rem 1.25rem; display: flex; align-items: center; justify-content: space-between; }
+.picks-modal-hdr h2 { font-family: var(--fd); font-size: 1.4rem; letter-spacing: 1px; }
+.picks-modal-close { background: rgba(255,255,255,.2); border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.picks-modal-body { padding: 1.25rem; max-height: 80vh; overflow-y: auto; }
+.picks-section-title { font-family: var(--fd); font-size: 1rem; letter-spacing: 1px; color: var(--green); margin: 1rem 0 .5rem; }
+.picks-groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; }
+.picks-group-card { background: #fff; border-radius: 8px; overflow: hidden; border: 0.5px solid var(--border); }
+.picks-group-hdr { background: var(--green); color: #fff; padding: 5px 10px; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.picks-team-row { display: flex; align-items: center; gap: 7px; padding: 5px 10px; font-size: 12px; border-bottom: 0.5px solid #f0f0f0; }
+.picks-team-row:last-child { border-bottom: none; }
+.picks-team-row.correct { background: #e8f5ee; }
+.picks-team-row.wrong { background: #fdecea; }
+.picks-pos { width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+.picks-pos.q { background: var(--green); }
+.picks-pos.out { background: var(--muted); }
+.picks-bracket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .75rem; }
+.picks-bracket-card { background: #fff; border-radius: 8px; padding: 8px 10px; border: 0.5px solid var(--border); font-size: 12px; }
+.picks-bracket-round { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.picks-bracket-pick { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.picks-bracket-pick.correct { color: var(--green); font-weight: 600; }
+.picks-bracket-pick.wrong { color: var(--red); text-decoration: line-through; opacity: .7; }
+.picks-score-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.picks-score-chip { background: #fff; border-radius: 8px; padding: 8px 14px; border: 0.5px solid var(--border); text-align: center; }
+.picks-score-chip .val { font-size: 22px; font-weight: 700; color: var(--green); }
+.picks-score-chip .lbl { font-size: 11px; color: var(--muted); }
+.board-wrap { background: var(--surface); border-radius: var(--r); overflow: hidden; display: flex; flex-direction: column; }
+.board-messages { flex: 1; overflow-y: auto; max-height: 460px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.board-msg { display: flex; gap: 10px; align-items: flex-start; }
+.board-msg.mine { flex-direction: row-reverse; }
+.board-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--green); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.board-avatar.admin-av { background: var(--gold); color: var(--dark); }
+.board-bubble { max-width: 75%; }
+.board-meta { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.board-msg.mine .board-meta { text-align: right; }
+.board-text { background: #fff; color: var(--text); border-radius: 12px; border-bottom-left-radius: 3px; padding: 8px 12px; font-size: 13px; line-height: 1.5; border: 0.5px solid var(--border); word-break: break-word; }
+.board-msg.mine .board-text { background: var(--green); color: #fff; border: none; border-radius: 12px; border-bottom-right-radius: 3px; }
+.board-msg.admin-msg .board-text { background: #fff8e1; color: var(--text); border-color: rgba(201,162,39,.3); }
+.board-compose { border-top: 1px solid var(--border); padding: 10px; display: flex; gap: 8px; align-items: flex-end; background: #fff; }
+.board-input { flex: 1; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 20px; font-family: var(--fb); font-size: 14px; color: var(--text); background: #fff; resize: none; outline: none; line-height: 1.4; }
+.board-input::placeholder { color: #888; }
+.board-input:focus { border-color: var(--green); }
+.board-send-btn { background: var(--green); color: #fff; border: none; padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--fb); white-space: nowrap; flex-shrink: 0; }
+.board-send-btn:hover { background: var(--green-mid); }
+.board-empty { text-align: center; color: #555; font-size: 14px; font-weight: 500; padding: 2rem; }
+
+/* In-message links + YouTube thumbnail cards */
+.board-link { color: var(--green); text-decoration: underline; word-break: break-all; }
+.board-msg.mine .board-text .board-link { color: #e6fff0; }
+.yt-card { display: block; margin-top: 8px; width: 100%; max-width: 280px; border-radius: 10px; overflow: hidden; position: relative; text-decoration: none; }
+.yt-thumb { display: block; width: 100%; aspect-ratio: 16 / 9; background-size: cover; background-position: center; background-color: #000; position: relative; }
+.yt-play { position: absolute; inset: 0; margin: auto; width: 48px; height: 34px; background: rgba(0,0,0,.7); border-radius: 9px; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+.yt-card:hover .yt-play { background: var(--red); }
+.yt-title { font-size: 11px; color: var(--muted); padding: 5px 2px 0; }
+
+.toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--green); color: #fff; padding: 10px 24px; border-radius: 30px; font-size: 14px; font-weight: 500; opacity: 0; pointer-events: none; transition: all .3s; z-index: 9999; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--red); }
+
+/* VENMO MODAL */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.modal { background: #fff; border-radius: 16px; padding: 2rem; max-width: 380px; width: 100%; text-align: center; }
+.modal h2 { font-family: var(--fd); font-size: 1.5rem; color: var(--dark); letter-spacing: 1px; margin-bottom: .5rem; }
+.modal p { font-size: 14px; color: var(--muted); margin-bottom: 1.25rem; line-height: 1.6; }
+.venmo-btn { display: inline-flex; align-items: center; gap: 8px; background: #5f4fcf; color: #fff; padding: 12px 28px; border-radius: 30px; font-size: 15px; font-weight: 700; text-decoration: none; margin-bottom: 12px; }
+.modal-close { display: block; color: var(--muted); font-size: 13px; cursor: pointer; margin-top: 8px; }
+.modal-close:hover { color: var(--text); }
+
 @media (max-width: 600px) {
   .main { padding: 1rem; }
-  .beer-flag { font-size: 20px; }
-  .progress-card { gap: 1rem; }
+  .ggrid { grid-template-columns: 1fr; }
+  .lbhdr, .lbrow { grid-template-columns: 32px 1fr 36px 44px 44px 44px 50px; font-size: 11px; padding: 8px 8px; gap: 3px; }
+  .sval { font-size: 13px; }
+  .bcon { min-width: 750px; }
+  .sbar { flex-direction: column; align-items: stretch; }
+  .match-card { grid-template-columns: 1fr auto 1fr; gap: 6px; padding: 10px 10px; }
+  .match-team { font-size: 12px; gap: 5px; }
+  .match-score { font-size: 1.2rem; padding: 3px 8px; }
 }
 </style>
 </head>
 <body>
 
 <div class="hdr">
-  <div class="logo">⚽ BEER <span>RUN</span> 2026</div>
-  <a class="back-btn" href="index.html">← Back to Pool</a>
+  <div class="logo">WORLD CUP <span>2026</span> PICKS</div>
+  <nav class="nav" id="main-nav" style="display:none">
+    <button class="nav-btn active" onclick="showPage('groups')">Group Stage</button>
+    <button class="nav-btn" onclick="showPage('bracket')">Bracket</button>
+    <button class="nav-btn" onclick="showPage('scores')">⚽ Scores</button>
+    <button class="nav-btn" onclick="showPage('leaderboard')">Leaderboard</button>
+    <button class="nav-btn" onclick="showPage('board')">💬 Board</button>
+    <button class="nav-btn" id="admin-nav-btn" style="display:none" onclick="showPage('admin')">⚙ Admin</button>
+  </nav>
+  <div class="ubar" id="ubar" style="display:none">
+    <span class="uname" id="uname-display"></span>
+    <button class="abadge" id="admin-btn" style="display:none" onclick="showPage('admin')">Admin</button>
+    <span class="ubadge" onclick="doLogout()">Sign Out</span>
+  </div>
 </div>
 
 <div class="main">
-  <div id="loading" class="spin-wrap">
-    <div class="spinner"></div>
-    <span>Connecting...</span>
+
+  <div id="page-loading" class="page active">
+    <div class="spin-wrap"><div class="spinner"></div><span>Connecting...</span></div>
   </div>
 
-  <div id="app" style="display:none">
-    <div class="win-banner" id="win-banner">
-      <h2>🏆 ALL 48 DONE!</h2>
-      <p>World Cup champions of drinking.</p>
-    </div>
-
-    <!-- Progress -->
-    <div class="progress-card">
-      <div class="progress-text">
-        <div class="progress-title">BEER TRACKER</div>
-        <div class="progress-sub">48 countries · tap to check off</div>
-      </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="prog-fill" style="width:0%"></div>
+  <div id="page-login" class="page">
+    <div class="lwrap">
+      <div class="lcard">
+        <div id="fb-warn" class="fb-warn" style="display:none">⚠️ <strong>Firebase not configured.</strong> Open this file in a text editor and paste your Firebase config at the top.</div>
+        <div class="trophy">🏆</div>
+        <div class="ltitle">2026 PICKS</div>
+        <div class="lsub" id="lsub">Sign in or create your account</div>
+        <input class="linput" id="l-email" type="email" placeholder="Email address" />
+        <input class="linput" id="l-name" placeholder="Display name (new accounts only)" />
+        <div style="position:relative">
+          <input class="linput" id="l-pass" type="password" placeholder="Password (6+ characters)" style="padding-right:44px;margin-bottom:0" />
+          <span onclick="togglePass('l-pass','eye1')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none" id="eye1">👁</span>
         </div>
-        <div class="progress-pct" id="prog-pct">0 of 48 beers downed</div>
+        <div id="l-confirm-wrap" style="display:none;position:relative;margin-top:10px">
+          <input class="linput" id="l-confirm" type="password" placeholder="Confirm password" style="padding-right:44px;margin-bottom:0" />
+          <span onclick="togglePass('l-confirm','eye2')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none" id="eye2">👁</span>
+        </div>
+        <button class="btn-p" id="l-btn" onclick="doLogin()">Sign In</button>
+        <span class="slink" id="slink" onclick="toggleMode()">New here? Create account →</span>
+        <span class="slink" id="forgot-link" onclick="doForgotPassword()" style="color:var(--green);margin-top:4px">Forgot password?</span>
+        <div class="lerr" id="lerr"></div>
+        <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;text-align:left">
+          🔒 <strong>Private pool.</strong> This is a private contest among invited participants only. No entry fees are retained by the organizer — all proceeds are paid out to winners.
+        </div>
       </div>
-      <div class="ring-wrap">
-        <div class="ring-num" id="prog-num">0%</div>
-        <div class="ring-lbl">complete</div>
+    </div>
+  </div>
+
+  <!-- GROUP STAGE -->
+  <div id="page-groups" class="page">
+    <div id="pay-banner-groups"></div>
+    <div class="stitle">GROUP STAGE PICKS</div>
+    <div class="ssub">Drag teams to predict finishing order. Top 2 from each group + 8 best 3rd-place teams advance. <strong>1 point</strong> per correct position.</div>
+    <div class="ggrid" id="groups-grid"></div>
+    <div class="sbar">
+      <span class="sbar-txt" id="groups-lock-msg">Picks can be changed until the group stage begins</span>
+      <button class="btn-s" id="save-groups-btn" onclick="saveGroups()">Save Group Picks</button>
+    </div>
+  </div>
+
+  <!-- BRACKET -->
+  <div id="page-bracket" class="page">
+    <div id="pay-banner-bracket"></div>
+
+    <div class="tbc">
+      <div class="tbl">Tiebreaker</div>
+      <div class="tbt">Total Goals in the Final</div>
+      <div class="tbs">Closest guess breaks ties on the leaderboard. Submit before the Final begins.</div>
+      <input class="tbinput" type="number" id="tiebreaker" min="0" max="30" placeholder="0" />
+      <button class="btn-s" style="margin-left:12px;padding:10px 18px" onclick="saveTiebreaker()">Save</button>
+    </div>
+
+    <div class="stitle">KNOCKOUT BRACKET</div>
+    <div class="ssub">Pick the winner of every match. Points double each round.</div>
+    <div class="bnotice">
+      <strong>Scoring:</strong> Round of 32 = 1pt &nbsp;|&nbsp; Round of 16 = 2pts &nbsp;|&nbsp; QF = 4pts &nbsp;|&nbsp; SF = 8pts &nbsp;|&nbsp; Final = 16pts<br>
+      <span style="margin-top:6px;display:block">Bracket seeds are auto-filled from the official 2026 FIFA schedule once you enter group results in the Admin panel.</span>
+    </div>
+    <div class="bscroll">
+      <div class="bcon" id="bracket-con"></div>
+    </div>
+    <div style="margin-top:1.5rem">
+      <button class="btn-s" onclick="saveBracket()">Save Bracket Picks</button>
+    </div>
+  </div>
+
+  <!-- SCORES / SCHEDULE TAB -->
+  <div id="page-scores" class="page">
+    <div class="stitle">SCHEDULE &amp; SCORES</div>
+    <div class="ssub">All 104 matches — group stage through the Final.</div>
+
+    <div class="scores-disclaimer">
+      <span class="di">⏱</span>
+      <div>
+        <strong>Scores are not live.</strong> This data comes from a free community-maintained source
+        (<a href="https://github.com/openfootball/worldcup.json" target="_blank" style="color:var(--gold-l)">openfootball</a>)
+        that is updated by volunteers, typically within an hour after a match ends.
+        Results during an active match will not appear until it's over.
+        Refresh manually to check for the latest updates.
       </div>
     </div>
 
-    <!-- Filters -->
-    <div class="filters">
-      <button class="filter-btn active" onclick="setFilter('all', this)">All (48)</button>
-      <button class="filter-btn" id="btn-remaining" onclick="setFilter('remaining', this)">Remaining</button>
-      <button class="filter-btn" id="btn-done" onclick="setFilter('done', this)">Done</button>
-      <div style="width:1px;height:20px;background:rgba(255,255,255,.1);margin:0 2px;align-self:center"></div>
-      <button class="filter-btn" onclick="setFilter('group-A', this)">Group A</button>
-      <button class="filter-btn" onclick="setFilter('group-B', this)">Group B</button>
-      <button class="filter-btn" onclick="setFilter('group-C', this)">Group C</button>
-      <button class="filter-btn" onclick="setFilter('group-D', this)">Group D</button>
-      <button class="filter-btn" onclick="setFilter('group-E', this)">Group E</button>
-      <button class="filter-btn" onclick="setFilter('group-F', this)">Group F</button>
-      <button class="filter-btn" onclick="setFilter('group-G', this)">Group G</button>
-      <button class="filter-btn" onclick="setFilter('group-H', this)">Group H</button>
-      <button class="filter-btn" onclick="setFilter('group-I', this)">Group I</button>
-      <button class="filter-btn" onclick="setFilter('group-J', this)">Group J</button>
-      <button class="filter-btn" onclick="setFilter('group-K', this)">Group K</button>
-      <button class="filter-btn" onclick="setFilter('group-L', this)">Group L</button>
+    <div class="scores-controls">
+      <button class="filter-btn active" onclick="setScoresFilter('all', this)">All Matches</button>
+      <button class="filter-btn" onclick="setScoresFilter('today', this)">Today</button>
+      <button class="filter-btn" onclick="setScoresFilter('results', this)">Results</button>
+      <button class="filter-btn" onclick="setScoresFilter('upcoming', this)">Upcoming</button>
+      <div style="width:1px;height:20px;background:rgba(255,255,255,.1);margin:0 4px"></div>
+      <button class="filter-btn" id="filter-gs" onclick="setScoresFilter('group', this)">Group Stage</button>
+      <button class="filter-btn" id="filter-ko" onclick="setScoresFilter('knockout', this)">Knockout</button>
+      <button class="scores-refresh" id="refresh-btn" onclick="loadScheduleData(true)">
+        <span class="refresh-icon" id="refresh-icon">↻</span> Refresh
+      </button>
     </div>
 
-    <div id="beer-list"></div>
+    <div class="scores-last-updated" id="scores-last-updated"></div>
+    <div id="scores-container">
+      <div class="spin-wrap"><div class="spinner"></div><span>Loading schedule...</span></div>
+    </div>
+  </div>
 
-    <div class="sync-bar" id="sync-bar">🟢 Live — changes sync for everyone instantly</div>
+  <!-- LEADERBOARD -->
+  <div id="page-leaderboard" class="page">
+    <div class="stitle">LEADERBOARD</div>
+    <div class="ssub">Scores update as official results are entered. Unpaid entries are shown but marked.</div>
+
+    <div style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.35);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;display:flex;gap:2rem;flex-wrap:wrap">
+      <div>
+        <div style="font-family:var(--fd);font-size:.85rem;letter-spacing:1px;color:var(--gold);margin-bottom:4px">🥇 1ST PLACE</div>
+        <div style="color:#fff;font-size:14px;font-weight:600">Winner takes the pot</div>
+        <div style="color:rgba(255,255,255,.5);font-size:12px">All entry fees minus 2nd place's refund</div>
+      </div>
+      <div style="border-left:1px solid rgba(255,255,255,.1);padding-left:2rem">
+        <div style="font-family:var(--fd);font-size:.85rem;letter-spacing:1px;color:rgba(255,255,255,.5);margin-bottom:4px">🥈 2ND PLACE</div>
+        <div style="color:#fff;font-size:14px;font-weight:600">Entry fee returned</div>
+        <div style="color:rgba(255,255,255,.5);font-size:12px">You get your $50 back — no loss, no gain</div>
+      </div>
+    </div>
+    <div class="lbwrap">
+      <div class="lbhdr">
+        <span style="text-align:center">#</span>
+        <span>Player</span>
+        <span style="text-align:center">Paid</span>
+        <span style="text-align:right">Groups</span>
+        <span style="text-align:right">Bracket</span>
+        <span style="text-align:right">Total</span>
+        <span style="text-align:right">Max Poss.</span>
+      </div>
+      <div id="lb-rows"><div class="spin-wrap" style="padding:2rem"><div class="spinner"></div></div></div>
+    </div>
+    <p style="color:rgba(255,255,255,.25);font-size:12px;margin-top:10px">Tiebreaker: closest total goals guess in the final &nbsp;·&nbsp; This is a private contest among invited participants. No entry fees are retained by the organizer — all proceeds paid out to winners.</p>
+  </div>
+
+  <!-- MESSAGE BOARD -->
+  <div id="page-board" class="page">
+    <div class="stitle">MESSAGE BOARD</div>
+    <div class="ssub">Chat with everyone in the pool. Keep it fun!</div>
+    <div class="board-wrap">
+      <div class="board-messages" id="board-messages">
+        <div class="spin-wrap" style="padding:2rem"><div class="spinner"></div></div>
+      </div>
+      <div class="board-compose">
+        <textarea class="board-input" id="board-input" placeholder="Write a message..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postMessage();}"></textarea>
+        <button class="board-send-btn" onclick="postMessage()">Post</button>
+      </div>
+    </div>
+    <div style="margin-top:2rem">
+      <div class="stitle" style="font-size:1.2rem">✉ Message the Commissioners</div>
+      <div class="ssub" style="margin-bottom:1rem">Send a private message to the admins. Only they can see and reply.</div>
+      <div class="board-wrap">
+        <div class="board-messages" id="dm-messages">
+          <div class="spin-wrap" style="padding:2rem"><div class="spinner"></div></div>
+        </div>
+        <div class="board-compose">
+          <textarea class="board-input" id="dm-input" placeholder="Write a private message to the admins..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postDM();}"></textarea>
+          <button class="board-send-btn" onclick="postDM()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="page-admin" class="page">
+    <div class="stitle">COMMISSIONER PANEL</div>
+    <div class="ssub">Enter official results to automatically update all scores and bracket seedings.</div>
+
+    <div class="asec">
+      <h3>📬 Private Message Inbox</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Messages sent privately by players. Only admins can see and reply to these.</p>
+      <div class="board-wrap" style="background:#fff;border-radius:10px">
+        <div class="board-messages" id="admin-dm-messages" style="max-height:320px">
+          <div class="spin-wrap" style="padding:2rem"><div class="spinner"></div></div>
+        </div>
+        <div class="board-compose">
+          <textarea class="board-input" id="admin-dm-input" placeholder="Reply to a player (your reply appears in their DM view)..." rows="2" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();postAdminDMReply();}"></textarea>
+          <button class="board-send-btn" onclick="postAdminDMReply()">Reply</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="asec">
+      <h3>📣 Email Everyone</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Send a group announcement using the emails players signed up with. Both options open your own email app with you as the To recipient — just type your message and send. <strong>BCC</strong> keeps everyone's address private from each other (best for announcements). <strong>CC</strong> shows all addresses so people can reply-all (best for a group conversation). If your mail app doesn't open, use <strong>Copy all addresses</strong> and paste them in yourself.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="emailAllPlayers('bcc')">✉ Group email — BCC (private)</button>
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="emailAllPlayers('cc')">✉ Group email — CC (visible)</button>
+        <button class="btn-s" onclick="copyAllEmails()">📋 Copy all addresses</button>
+      </div>
+    </div>
+
+    <div class="asec">
+      <h3>💰 Payment Status</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Mark players as paid after confirming their Venmo payment.</p>
+      <div class="pay-grid" id="pay-admin-grid"></div>
+    </div>
+
+    <div class="asec">
+      <h3>Group Stage — Official Finishing Order</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Set the actual 1st–4th finish for each group. This auto-seeds the Round of 32 bracket. Use <strong>Auto-fill</strong> to compute standings from live match data (points → goal difference → goals scored → head-to-head), then <strong>review and Save</strong>.</p>
+      <div class="aggrid" id="admin-groups"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;align-items:center">
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="autoFillGroupResults()">⚡ Auto-fill from live results</button>
+        <button class="btn-s" onclick="saveAdminGroups()">Save Group Results & Auto-Seed Bracket</button>
+      </div>
+    </div>
+
+    <div class="asec">
+      <h3>Knockout Results — Official Match Winners</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Select the winner of each knockout match to score brackets and seed the next round. Use <strong>Auto-fill</strong> to pull match results from live data (winners are derived from penalties → extra time → full time) and advance winners through the bracket, then <strong>review and Save</strong>. Save group results first.</p>
+      <div class="abgrid" id="admin-bracket"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;align-items:center">
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="autoFillKnockout()">⚡ Auto-fill from live results</button>
+        <button class="btn-s" onclick="saveAdminBracket()">Save Bracket Results</button>
+      </div>
+    </div>
+
+    <div class="asec">
+      <h3>Final Tiebreaker — Total Goals</h3>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+        <input class="tbinput" type="number" id="admin-final-goals" placeholder="0" min="0" max="30" />
+        <button class="btn-s" onclick="saveFinalGoals()">Save</button>
+      </div>
+    </div>
+
+    <div class="asec">
+      <h3>Lock / Unlock Picks</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Lock picks before each phase so nobody can change selections.</p>
+      <div class="lock-row">
+        <button class="btn-lock" onclick="setLock('groups', true)">🔒 Lock Group Picks</button>
+        <button class="btn-unlock" onclick="setLock('groups', false)">🔓 Unlock Group Picks</button>
+      </div>
+      <div class="lock-row" style="margin-top:8px">
+        <button class="btn-lock" onclick="setLock('bracket', true)">🔒 Lock Bracket Picks</button>
+        <button class="btn-unlock" onclick="setLock('bracket', false)">🔓 Unlock Bracket Picks</button>
+      </div>
+    </div>
+
+    <div class="asec">
+      <h3>💾 Backup — Export Everyone's Picks</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Once picks are locked, download a complete copy of every player's picks. Keep the file somewhere safe — if the database ever goes down, you'll still have a full record. The <strong>JSON</strong> is a restorable backup; the <strong>HTML snapshot</strong> is a readable, printable page that works offline.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-s" onclick="exportAllPicksJSON()">⬇ Download full backup (JSON)</button>
+        <button class="btn-s" style="background:var(--green);color:#fff" onclick="exportAllPicksHTML()">⬇ Download readable snapshot (HTML)</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- PICKS VIEWER MODAL -->
+<div class="picks-modal-bg" id="picks-modal" style="display:none" onclick="closePicksModal(event)">
+  <div class="picks-modal" onclick="event.stopPropagation()">
+    <div class="picks-modal-hdr">
+      <h2 id="picks-modal-title">Player Picks</h2>
+      <button class="picks-modal-close" onclick="closePicksModal()">✕</button>
+    </div>
+    <div class="picks-modal-body" id="picks-modal-body"></div>
+  </div>
+</div>
+
+<!-- VENMO MODAL -->
+<div class="modal-bg" id="venmo-modal" style="display:none">
+  <div class="modal">
+    <h2>💰 Entry Fee</h2>
+    <p>Pay <strong id="modal-fee"></strong> to <strong id="modal-venmo"></strong> on Venmo to enter the pool. Once the commissioner confirms your payment, your entry will be fully active.</p>
+    <div style="background:#fff3cd;border:1px solid #f0ad4e;border-radius:10px;padding:12px 14px;margin:12px 0;text-align:left">
+      <p style="font-size:13px;color:#856404;font-weight:700;margin-bottom:6px">⚠️ Important — Venmo note required</p>
+      <p style="font-size:13px;color:#856404;line-height:1.6;margin:0">The note field will be pre-filled with your name. <strong>If you are paying for multiple people</strong>, you must <strong>edit the note to include every name</strong> — otherwise we won't know who the extra payment is for.<br><br>Example note: <em>"John Smith, Jane Smith"</em></p>
+    </div>
+    <a id="venmo-link" href="#" class="venmo-btn" target="_blank">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M19.5 1.5C20.9 3.3 21.5 5.1 21.5 7.4c0 6.9-5.9 15.9-10.7 22.1H2.6L0 2.5l8.2-.8 1.4 11.1c1.3-2.1 2.9-5.5 2.9-7.7 0-1.2-.2-2.1-.6-2.9L19.5 1.5z"/></svg>
+      Pay on Venmo
+    </a>
+    <p style="font-size:12px;color:#aaa;margin-top:10px">After paying, come back and your status will update once the commissioner confirms.</p>
+    <span class="modal-close" onclick="closeVenmoModal()">Close</span>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-const BEERS = [
-  // Group A
-  { flag:"🇲🇽", country:"Mexico",         group:"A", beer:"Modelo Especial",             where:"Anywhere" },
-  { flag:"🇿🇦", country:"South Africa",   group:"A", beer:"Castle Lager",                where:"Spec's" },
-  { flag:"🇰🇷", country:"South Korea",    group:"A", beer:"Hite",                        where:"H-Mart" },
-  { flag:"🇨🇿", country:"Czechia",        group:"A", beer:"Pilsner Urquell",             where:"Spec's" },
-  // Group B
-  { flag:"🇨🇦", country:"Canada",         group:"B", beer:"Molson Canadian",             where:"Spec's" },
-  { flag:"🇧🇦", country:"Bosnia & Herz.", group:"B", beer:"Sarajevsko",                  where:"European import" },
-  { flag:"🇶🇦", country:"Qatar",          group:"B", beer:"Qatari Dibs (N/A malt)",     where:"Middle Eastern grocers" },
-  { flag:"🇨🇭", country:"Switzerland",    group:"B", beer:"Boxer Lager",                 where:"Spec's" },
-  // Group C
-  { flag:"🇧🇷", country:"Brazil",         group:"C", beer:"Brahma",                      where:"Spec's" },
-  { flag:"🇲🇦", country:"Morocco",        group:"C", beer:"Casablanca Beer",             where:"Spec's" },
-  { flag:"🇭🇹", country:"Haiti",          group:"C", beer:"Prestige Beer",               where:"Caribbean markets" },
-  { flag:"🏴󠁧󠁢󠁳󠁣󠁴󠁿", country:"Scotland",       group:"C", beer:"Innis & Gunn Original",    where:"Spec's" },
-  // Group D
-  { flag:"🇺🇸", country:"USA",            group:"D", beer:"Shiner Bock",                 where:"Anywhere" },
-  { flag:"🇵🇾", country:"Paraguay",       group:"D", beer:"Brahma Paraguay",             where:"Sub Brahma" },
-  { flag:"🇦🇺", country:"Australia",      group:"D", beer:"Coopers Sparkling Ale",       where:"Spec's" },
-  { flag:"🇹🇷", country:"Türkiye",        group:"D", beer:"Efes Pilsen",                 where:"Spec's" },
-  // Group E
-  { flag:"🇩🇪", country:"Germany",        group:"E", beer:"Paulaner Hefeweizen",         where:"Spec's" },
-  { flag:"🇨🇼", country:"Curaçao",        group:"E", beer:"Amstel Bright",               where:"Caribbean markets" },
-  { flag:"🇨🇮", country:"Côte d'Ivoire",  group:"E", beer:"Castel",                      where:"African import shops" },
-  { flag:"🇪🇨", country:"Ecuador",        group:"E", beer:"Pilsener Ecuador",            where:"Hillcroft" },
-  // Group F
-  { flag:"🇳🇱", country:"Netherlands",    group:"F", beer:"Heineken",                    where:"Anywhere" },
-  { flag:"🇯🇵", country:"Japan",          group:"F", beer:"Sapporo",                     where:"Spec's" },
-  { flag:"🇸🇪", country:"Sweden",         group:"F", beer:"Carlsberg",                   where:"Spec's" },
-  { flag:"🇹🇳", country:"Tunisia",        group:"F", beer:"Celtia",                      where:"Specialty / sub Kronenbourg" },
-  // Group G
-  { flag:"🇧🇪", country:"Belgium",        group:"G", beer:"Duvel",                       where:"Spec's" },
-  { flag:"🇪🇬", country:"Egypt",          group:"G", beer:"Stella Artois",               where:"Anywhere" },
-  { flag:"🇮🇷", country:"Iran",           group:"G", beer:"Delster (N/A malt)",          where:"Middle Eastern grocers" },
-  { flag:"🇳🇿", country:"New Zealand",    group:"G", beer:"Steinlager",                  where:"Spec's" },
-  // Group H
-  { flag:"🇪🇸", country:"Spain",          group:"H", beer:"Estrella Damm",               where:"Spec's" },
-  { flag:"🇨🇻", country:"Cape Verde",     group:"H", beer:"Super Bock",                  where:"Spec's" },
-  { flag:"🇸🇦", country:"Saudi Arabia",   group:"H", beer:"Barbican (N/A malt)",         where:"Middle Eastern grocers" },
-  { flag:"🇺🇾", country:"Uruguay",        group:"H", beer:"Patricia",                    where:"Specialty / sub Brahma" },
-  // Group I
-  { flag:"🇫🇷", country:"France",         group:"I", beer:"Kronenbourg 1664",            where:"Spec's" },
-  { flag:"🇸🇳", country:"Senegal",        group:"I", beer:"Guinness Foreign Extra Stout",where:"Spec's" },
-  { flag:"🇮🇶", country:"Iraq",           group:"I", beer:"Farida (N/A malt)",           where:"Middle Eastern grocers" },
-  { flag:"🇳🇴", country:"Norway",         group:"I", beer:"Hansa Pilsner",               where:"Specialty" },
-  // Group J
-  { flag:"🇦🇷", country:"Argentina",      group:"J", beer:"Quilmes",                     where:"Spec's" },
-  { flag:"🇩🇿", country:"Algeria",        group:"J", beer:"Kronenbourg 1664",            where:"Spec's" },
-  { flag:"🇦🇹", country:"Austria",        group:"J", beer:"Stiegl Goldbräu",             where:"Spec's" },
-  { flag:"🇯🇴", country:"Jordan",         group:"J", beer:"Petra Beer",                  where:"Middle Eastern grocers" },
-  // Group K
-  { flag:"🇵🇹", country:"Portugal",       group:"K", beer:"Super Bock",                  where:"Spec's" },
-  { flag:"🇨🇩", country:"Congo DR",       group:"K", beer:"Primus Congo",                where:"African import shops" },
-  { flag:"🇺🇿", country:"Uzbekistan",     group:"K", beer:"Sarbast",                     where:"Specialty" },
-  { flag:"🇨🇴", country:"Colombia",       group:"K", beer:"Águila",                      where:"Latin markets" },
-  // Group L
-  { flag:"🏴󠁧󠁢󠁥󠁮󠁧󠁿", country:"England",        group:"L", beer:"Fuller's London Pride",    where:"Spec's" },
-  { flag:"🇭🇷", country:"Croatia",        group:"L", beer:"Karlovačko",                  where:"Specialty import" },
-  { flag:"🇬🇭", country:"Ghana",          group:"L", beer:"Guinness Foreign Extra Stout",where:"Spec's" },
-  { flag:"🇵🇦", country:"Panama",         group:"L", beer:"Balboa",                      where:"Hillcroft / Latin markets" },
+// ══════════════════════════════════════════════
+// OFFICIAL 2026 WORLD CUP GROUPS
+// ══════════════════════════════════════════════
+const GROUPS = {
+  A: ['Mexico','South Africa','South Korea','Czech Republic'],
+  B: ['Canada','Bosnia & Herzegovina','Qatar','Switzerland'],
+  C: ['Brazil','Morocco','Haiti','Scotland'],
+  D: ['USA','Paraguay','Australia','Türkiye'],
+  E: ['Germany','Curaçao','Ivory Coast','Ecuador'],
+  F: ['Netherlands','Japan','Sweden','Tunisia'],
+  G: ['Belgium','Egypt','Iran','New Zealand'],
+  H: ['Spain','Cape Verde','Saudi Arabia','Uruguay'],
+  I: ['France','Senegal','Iraq','Norway'],
+  J: ['Argentina','Algeria','Austria','Jordan'],
+  K: ['Portugal','DR Congo','Uzbekistan','Colombia'],
+  L: ['England','Croatia','Ghana','Panama']
+};
+
+const FLAGS = {
+  'Mexico':'mx','South Africa':'za','South Korea':'kr','Czech Republic':'cz',
+  'Canada':'ca','Bosnia & Herzegovina':'ba','Qatar':'qa','Switzerland':'ch',
+  'Brazil':'br','Morocco':'ma','Haiti':'ht','Scotland':'gb-sct',
+  'USA':'us','Paraguay':'py','Australia':'au','Türkiye':'tr',
+  'Germany':'de','Curaçao':'cw','Ivory Coast':'ci','Ecuador':'ec',
+  'Netherlands':'nl','Japan':'jp','Sweden':'se','Tunisia':'tn',
+  'Belgium':'be','Egypt':'eg','Iran':'ir','New Zealand':'nz',
+  'Spain':'es','Cape Verde':'cv','Saudi Arabia':'sa','Uruguay':'uy',
+  'France':'fr','Senegal':'sn','Iraq':'iq','Norway':'no',
+  'Argentina':'ar','Algeria':'dz','Austria':'at','Jordan':'jo',
+  'Portugal':'pt','DR Congo':'cd','Uzbekistan':'uz','Colombia':'co',
+  'England':'gb-eng','Croatia':'hr','Ghana':'gh','Panama':'pa'
+};
+
+function flagImg(team, small = false) {
+  const code = FLAGS[team];
+  if (!code) return '';
+  const cls = small ? 'bfi' : 'fi';
+  return `<img class="${cls}" src="https://flagcdn.com/w40/${code}.png" alt="${team}" title="${team}" />`;
+}
+
+const R32_SEEDING = [
+  { t1: ['E',1], t2: ['?',3], label: '1E vs best 3rd (ABCDF)',  kickoff: '2026-06-29T20:30:00', venue: 'Foxborough, MA' },
+  { t1: ['I',1], t2: ['?',3], label: '1I vs best 3rd (CDFGH)',  kickoff: '2026-06-30T21:00:00', venue: 'E. Rutherford, NJ' },
+  { t1: ['A',2], t2: ['B',2], label: '2A vs 2B',                kickoff: '2026-06-28T19:00:00', venue: 'Inglewood, CA' },
+  { t1: ['F',1], t2: ['C',2], label: '1F vs 2C',                kickoff: '2026-06-30T01:00:00', venue: 'Guadalupe, Mexico' },
+  { t1: ['K',2], t2: ['L',2], label: '2K vs 2L',                kickoff: '2026-07-02T23:00:00', venue: 'Toronto, Canada' },
+  { t1: ['H',1], t2: ['J',2], label: '1H vs 2J',                kickoff: '2026-07-02T19:00:00', venue: 'Inglewood, CA' },
+  { t1: ['D',1], t2: ['?',3], label: '1D vs best 3rd (BEFIJ)',  kickoff: '2026-07-02T00:00:00', venue: 'Santa Clara, CA' },
+  { t1: ['G',1], t2: ['?',3], label: '1G vs best 3rd (AEHIJ)',  kickoff: '2026-07-01T20:00:00', venue: 'Seattle, WA' },
+  { t1: ['C',1], t2: ['F',2], label: '1C vs 2F',                kickoff: '2026-06-29T17:00:00', venue: 'Houston, TX' },
+  { t1: ['E',2], t2: ['I',2], label: '2E vs 2I',                kickoff: '2026-06-30T17:00:00', venue: 'Arlington, TX' },
+  { t1: ['A',1], t2: ['?',3], label: '1A vs best 3rd (CEFHI)',  kickoff: '2026-07-01T01:00:00', venue: 'Mexico City, Mexico' },
+  { t1: ['L',1], t2: ['?',3], label: '1L vs best 3rd (EHIJK)',  kickoff: '2026-07-01T16:00:00', venue: 'Atlanta, GA' },
+  { t1: ['J',1], t2: ['H',2], label: '1J vs 2H',                kickoff: '2026-07-03T22:00:00', venue: 'Miami, FL' },
+  { t1: ['D',2], t2: ['G',2], label: '2D vs 2G',                kickoff: '2026-07-03T18:00:00', venue: 'Arlington, TX' },
+  { t1: ['B',1], t2: ['?',3], label: '1B vs best 3rd (EFGIJ)',  kickoff: '2026-07-03T03:00:00', venue: 'Vancouver, Canada' },
+  { t1: ['K',1], t2: ['?',3], label: '1K vs best 3rd (DEIJL)',  kickoff: '2026-07-04T01:30:00', venue: 'Kansas City, MO' },
 ];
 
-const DB_PATH = 'beer-tracker-2026';
-let db, trackerData = { drank: {}, notes: {} }, currentFilter = 'all', editingNote = null, unsubscribe = null;
+const ROUND_SCHEDULES = {
+  r16: [
+    { kickoff: '2026-07-04T13:00:00', venue: 'Houston, TX' },
+    { kickoff: '2026-07-04T17:00:00', venue: 'Philadelphia, PA' },
+    { kickoff: '2026-07-05T16:00:00', venue: 'E. Rutherford, NJ' },
+    { kickoff: '2026-07-05T20:00:00', venue: 'Mexico City, Mexico' },
+    { kickoff: '2026-07-06T15:00:00', venue: 'Arlington, TX' },
+    { kickoff: '2026-07-06T17:00:00', venue: 'Seattle, WA' },
+    { kickoff: '2026-07-07T12:00:00', venue: 'Atlanta, GA' },
+    { kickoff: '2026-07-07T16:00:00', venue: 'Vancouver, Canada' },
+  ],
+  qf: [
+    { kickoff: '2026-07-09T16:00:00', venue: 'Foxborough, MA' },
+    { kickoff: '2026-07-10T15:00:00', venue: 'Inglewood, CA' },
+    { kickoff: '2026-07-11T17:00:00', venue: 'Miami, FL' },
+    { kickoff: '2026-07-11T21:00:00', venue: 'Kansas City, MO' },
+  ],
+  sf: [
+    { kickoff: '2026-07-14T15:00:00', venue: 'Arlington, TX' },
+    { kickoff: '2026-07-15T15:00:00', venue: 'E. Rutherford, NJ' },
+  ],
+  f: [
+    { kickoff: '2026-07-19T15:00:00', venue: 'E. Rutherford, NJ' },
+  ],
+};
+
+const ROUNDS = [
+  { id: 'r32', name: 'Round of 32', pts: 1, matches: 16 },
+  { id: 'r16', name: 'Round of 16', pts: 2, matches: 8 },
+  { id: 'qf',  name: 'Quarterfinals', pts: 4, matches: 4 },
+  { id: 'sf',  name: 'Semifinals', pts: 8, matches: 2 },
+  { id: 'f',   name: 'Final', pts: 16, matches: 1 }
+];
+
+// ══════════════════════════════════════════════
+// FIREBASE
+// ══════════════════════════════════════════════
+let db, auth, currentUser = null, officialData = {}, allUsers = {}, isCreate = false;
 
 function initApp() {
+  const cfg = FIREBASE_CONFIG;
+  if (!cfg.apiKey || cfg.apiKey === 'PASTE_YOUR_API_KEY_HERE') {
+    showPage('login');
+    document.getElementById('fb-warn').style.display = 'block';
+    return;
+  }
   try {
-    firebase.initializeApp(FIREBASE_CONFIG);
+    firebase.initializeApp(cfg);
     db = firebase.firestore();
-    subscribeToTracker();
+    auth = firebase.auth();
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      if (user) onLoggedIn();
+      else showPage('login');
+    });
+    loadOfficialData();
   } catch(e) {
-    document.getElementById('loading').innerHTML = '<div style="color:#c0392b;font-size:14px;text-align:center;padding:2rem">Firebase error: ' + e.message + '</div>';
+    showPage('login');
+    document.getElementById('fb-warn').style.display = 'block';
+    document.getElementById('fb-warn').textContent = '⚠️ Firebase error: ' + e.message;
   }
 }
 
-function subscribeToTracker() {
-  unsubscribe = db.collection('meta').doc(DB_PATH).onSnapshot(doc => {
-    trackerData = doc.exists ? doc.data() : { drank: {}, notes: {} };
-    trackerData.drank = trackerData.drank || {};
-    trackerData.notes = trackerData.notes || {};
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    renderAll();
-  }, err => {
-    setSyncStatus('error', '⚠️ Connection error — ' + err.message);
+async function loadOfficialData() {
+  try {
+    const doc = await db.collection('official').doc('results').get();
+    officialData = doc.exists ? doc.data() : {};
+  } catch(e) { officialData = {}; }
+}
+
+// ══════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const pages = ['groups','bracket','scores','leaderboard','board','admin'];
+  const idx = pages.indexOf(name);
+  const btns = document.querySelectorAll('.nav-btn');
+  if (btns[idx]) btns[idx].classList.add('active');
+  if (name === 'groups') renderGroups();
+  if (name === 'bracket') renderBracket();
+  if (name === 'scores') renderScores();
+  if (name === 'leaderboard') renderLeaderboard();
+  if (name === 'board') renderBoard();
+  if (name === 'admin') renderAdmin();
+}
+
+// ══════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════
+function togglePass(inputId, eyeId) {
+  const inp = document.getElementById(inputId);
+  const eye = document.getElementById(eyeId);
+  if (inp.type === 'password') { inp.type = 'text'; eye.textContent = '🙈'; }
+  else { inp.type = 'password'; eye.textContent = '👁'; }
+}
+
+function toggleMode() {
+  isCreate = !isCreate;
+  document.getElementById('lsub').textContent = isCreate ? 'Create your account' : 'Sign in to your account';
+  document.getElementById('slink').textContent = isCreate ? 'Already have an account? Sign in →' : 'New here? Create account →';
+  document.getElementById('l-btn').textContent = isCreate ? 'Create Account' : 'Sign In';
+  document.getElementById('l-confirm-wrap').style.display = isCreate ? 'block' : 'none';
+  document.getElementById('forgot-link').style.display = isCreate ? 'none' : 'block';
+  document.getElementById('lerr').textContent = '';
+}
+
+async function doLogin() {
+  const email = document.getElementById('l-email').value.trim();
+  const name  = document.getElementById('l-name').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  const err   = document.getElementById('lerr');
+  err.textContent = '';
+  if (!email || !pass) { err.textContent = 'Please enter your email and password.'; return; }
+  if (isCreate && !name) { err.textContent = 'Please enter a display name.'; return; }
+  if (isCreate) {
+    const confirm = document.getElementById('l-confirm').value;
+    if (pass !== confirm) { err.textContent = 'Passwords do not match.'; return; }
+    if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters.'; return; }
+  }
+  try {
+    if (isCreate) {
+      const cred = await auth.createUserWithEmailAndPassword(email, pass);
+      await cred.user.updateProfile({ displayName: name });
+      await db.collection('users').doc(cred.user.uid).set({
+        displayName: name, email,
+        picks: {}, bracketPicks: {}, tiebreaker: null, paid: false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      toast('Welcome, ' + name + '! 🏆');
+    } else {
+      await auth.signInWithEmailAndPassword(email, pass);
+    }
+  } catch(e) { err.textContent = friendlyErr(e.code); }
+}
+
+async function doForgotPassword() {
+  const email = document.getElementById('l-email').value.trim();
+  const err = document.getElementById('lerr');
+  err.style.color = '#c0392b';
+  if (!email) { err.textContent = 'Please enter your email address first.'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    err.style.color = 'var(--green)';
+    err.textContent = '✓ Reset email sent! Check your inbox.';
+  } catch(e) { err.textContent = friendlyErr(e.code); }
+}
+
+function friendlyErr(code) {
+  const m = {
+    'auth/email-already-in-use': 'That email is already registered. Try signing in.',
+    'auth/invalid-email': 'Please enter a valid email address.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/user-not-found': 'No account found with that email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Invalid email or password.',
+    'auth/configuration-not-found': 'Firebase Auth not enabled. Go to Firebase Console → Authentication → Get Started → Enable Email/Password.'
+  };
+  return m[code] || 'Error: ' + code;
+}
+
+function doLogout() { auth.signOut(); }
+
+function onLoggedIn() {
+  document.getElementById('main-nav').style.display = 'flex';
+  document.getElementById('ubar').style.display = 'flex';
+  document.getElementById('uname-display').textContent = '👤 ' + (currentUser.displayName || currentUser.email);
+  if (currentUser.email === ADMIN_EMAIL || currentUser.email === ADMIN_EMAIL_2) {
+    document.getElementById('admin-btn').style.display = 'inline-block';
+    document.getElementById('admin-nav-btn').style.display = 'inline-block';
+  }
+  showPage('groups');
+}
+
+// ══════════════════════════════════════════════
+// PAYMENT BANNER
+// ══════════════════════════════════════════════
+async function renderPayBanner(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    const paid = (doc.data() || {}).paid;
+    if (paid) {
+      el.innerHTML = `<div class="pay-ok">✅ Entry fee confirmed — you're in the pool!</div>`;
+    } else {
+      el.innerHTML = `<div class="pay-banner">
+        <p>💰 <strong>Entry fee not yet confirmed.</strong> Send $${ENTRY_FEE} to @${VENMO_USERNAME} on Venmo to lock in your entry.</p>
+        <button class="btn-pay" onclick="showVenmoModal()">Pay with Venmo</button>
+      </div>`;
+    }
+  } catch(e) { el.innerHTML = ''; }
+}
+
+function showVenmoModal() {
+  document.getElementById('modal-fee').textContent = '$' + ENTRY_FEE;
+  document.getElementById('modal-venmo').textContent = '@' + VENMO_USERNAME;
+  const note = encodeURIComponent('World Cup 2026 Pool Entry - ' + (currentUser.displayName || currentUser.email));
+  document.getElementById('venmo-link').href = `https://venmo.com/${VENMO_USERNAME}?txn=pay&amount=${ENTRY_FEE}&note=${note}`;
+  document.getElementById('venmo-modal').style.display = 'flex';
+}
+function closeVenmoModal() { document.getElementById('venmo-modal').style.display = 'none'; }
+
+// ══════════════════════════════════════════════
+// GROUP STAGE
+// ══════════════════════════════════════════════
+let userPicks = {}, dragSrc = null;
+
+async function renderGroups() {
+  renderPayBanner('pay-banner-groups');
+  const grid = document.getElementById('groups-grid');
+  grid.innerHTML = '<div class="spin-wrap" style="padding:2rem"><div class="spinner"></div></div>';
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    userPicks = (doc.data() || {}).picks || {};
+  } catch(e) { userPicks = {}; }
+  await loadOfficialData();
+  const locked = !!officialData.groupsLocked;
+  document.getElementById('save-groups-btn').disabled = locked;
+  document.getElementById('groups-lock-msg').textContent = locked ? '🔒 Group picks are locked' : 'Picks can be changed until the group stage begins';
+  grid.innerHTML = '';
+  Object.keys(GROUPS).forEach(gid => {
+    const teams = userPicks[gid] ? [...userPicks[gid]] : [...GROUPS[gid]];
+    const card = document.createElement('div');
+    card.className = 'gcard';
+    card.innerHTML = `<div class="ghdr"><span class="gname">GROUP ${gid}</span><span class="ghint">${locked ? '🔒 Locked' : 'Drag to reorder'}</span></div><div class="tlist" id="gl-${gid}"></div>`;
+    grid.appendChild(card);
+    const list = card.querySelector('#gl-' + gid);
+    teams.forEach((team, i) => buildRow(team, i, gid, list, locked));
   });
 }
 
-async function toggleDrank(country) {
-  const next = !trackerData.drank[country];
-  trackerData.drank[country] = next;
-  renderAll();
-  setSyncStatus('syncing', '⏳ Saving...');
+function buildRow(team, i, gid, list, locked) {
+  const row = document.createElement('div');
+  row.className = 'trow';
+  if (!locked) row.draggable = true;
+  row.dataset.group = gid;
+  row.innerHTML = `<div class="rbadge ${i < 2 ? 'q' : 'out'}">${i+1}</div>${flagImg(team)}<span class="tname">${team}</span>${locked ? '' : '<span class="dhandle">⠿</span>'}`;
+  if (!locked) setupDrag(row, gid, list);
+  list.appendChild(row);
+}
+
+function setupDrag(row, gid, list) {
+  row.setAttribute('draggable', true);
+  row.addEventListener('dragstart', e => { dragSrc = row; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+  row.addEventListener('dragend', () => { row.classList.remove('dragging'); list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over')); });
+  row.addEventListener('dragover', e => { e.preventDefault(); if (dragSrc && dragSrc !== row && dragSrc.dataset.group === gid) { list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over')); row.classList.add('drag-over'); } });
+  row.addEventListener('drop', e => {
+    e.preventDefault();
+    if (dragSrc && dragSrc !== row && dragSrc.dataset.group === gid) {
+      const rows = [...list.querySelectorAll('.trow')];
+      const si = rows.indexOf(dragSrc), ti = rows.indexOf(row);
+      if (si < ti) list.insertBefore(dragSrc, row.nextSibling); else list.insertBefore(dragSrc, row);
+      refreshBadges(list);
+    }
+  });
+  let touchDragSrc = null, touchClone = null, touchOffsetY = 0;
+  row.addEventListener('touchstart', e => {
+    touchDragSrc = row; row.classList.add('dragging');
+    const touch = e.touches[0]; const rect = row.getBoundingClientRect();
+    touchOffsetY = touch.clientY - rect.top;
+    touchClone = row.cloneNode(true);
+    touchClone.style.cssText = `position:fixed;z-index:1000;pointer-events:none;opacity:.85;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;background:#fff;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.2)`;
+    document.body.appendChild(touchClone);
+  }, { passive: true });
+  row.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!touchDragSrc || !touchClone) return;
+    const touch = e.touches[0];
+    touchClone.style.top = (touch.clientY - touchOffsetY) + 'px';
+    touchClone.style.display = 'none';
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    touchClone.style.display = '';
+    const target = el && el.closest('.trow');
+    list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over'));
+    if (target && target !== touchDragSrc && target.dataset.group === gid) target.classList.add('drag-over');
+  }, { passive: false });
+  row.addEventListener('touchend', e => {
+    if (!touchDragSrc || !touchClone) return;
+    const touch = e.changedTouches[0];
+    touchClone.remove(); touchClone = null; touchDragSrc.classList.remove('dragging');
+    list.querySelectorAll('.trow').forEach(r => r.classList.remove('drag-over'));
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const target = el && el.closest('.trow');
+    if (target && target !== touchDragSrc && target.dataset.group === gid) {
+      const rows = [...list.querySelectorAll('.trow')];
+      const si = rows.indexOf(touchDragSrc), ti = rows.indexOf(target);
+      if (si < ti) list.insertBefore(touchDragSrc, target.nextSibling);
+      else list.insertBefore(touchDragSrc, target);
+      refreshBadges(list);
+    }
+    touchDragSrc = null;
+  });
+}
+
+function refreshBadges(list) {
+  list.querySelectorAll('.trow').forEach((r, i) => {
+    const b = r.querySelector('.rbadge');
+    b.textContent = i + 1;
+    b.className = 'rbadge ' + (i < 2 ? 'q' : 'out');
+  });
+}
+
+function getGroupOrder() {
+  const result = {};
+  Object.keys(GROUPS).forEach(gid => {
+    const list = document.getElementById('gl-' + gid);
+    if (!list) return;
+    result[gid] = [...list.querySelectorAll('.trow')].map(r => r.querySelector('.tname').textContent);
+  });
+  return result;
+}
+
+async function saveGroups() {
+  if (officialData.groupsLocked) { toast('Group picks are locked!', true); return; }
+  const picks = getGroupOrder();
   try {
-    await db.collection('meta').doc(DB_PATH).set(
-      { drank: { [country]: next } },
-      { merge: true }
-    );
-    setSyncStatus('ok', '🟢 Live — changes sync for everyone instantly');
-    if (next) toast('🍺 ' + country + ' checked off!');
-  } catch(e) {
-    setSyncStatus('error', '⚠️ Save failed — ' + e.message);
+    await db.collection('users').doc(currentUser.uid).update({ picks });
+    userPicks = picks;
+    toast('Group picks saved! ✓');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+// ══════════════════════════════════════════════
+// TIEBREAKER
+// ══════════════════════════════════════════════
+async function renderTiebreaker() {
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    const tb = (doc.data() || {}).tiebreaker;
+    if (tb != null) document.getElementById('tiebreaker').value = tb;
+  } catch(e) {}
+}
+
+async function saveTiebreaker() {
+  const tb = parseInt(document.getElementById('tiebreaker').value);
+  if (isNaN(tb)) { toast('Please enter a number', true); return; }
+  try {
+    await db.collection('users').doc(currentUser.uid).update({ tiebreaker: tb });
+    toast('Tiebreaker saved! ✓');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+// ══════════════════════════════════════════════
+// BRACKET
+// ══════════════════════════════════════════════
+let bracketPicks = {};
+
+function resolveTeam(seed, groupResults) {
+  const [grp, pos] = seed;
+  if (grp === '?') return null;
+  const arr = groupResults[grp];
+  if (!arr || !arr[pos - 1]) return null;
+  return arr[pos - 1];
+}
+
+function getSlotTeams(roundId, matchIdx) {
+  const groupResults = officialData.groupResults || {};
+  const autoSlots = getAutoSeededSlots(groupResults);
+  const manualSlots = officialData.bracketSlots || {};
+  if (roundId === 'r32') {
+    const manual = ((manualSlots.r32 || {})[matchIdx]) || {};
+    const auto = (autoSlots.r32 || {})[matchIdx] || {};
+    const seeding = R32_SEEDING[matchIdx] || {};
+    return {
+      t1: manual.t1 || auto.t1 || null,
+      t2: manual.t2 || auto.t2 || null,
+      t1label: seeding.t1 ? formatSeedLabel(seeding.t1, seeding.label) : '?',
+      t2label: seeding.t2 ? formatSeedLabel(seeding.t2, seeding.label) : '?',
+    };
   }
+  const slot = ((manualSlots[roundId] || {})[matchIdx]) || {};
+  return { t1: slot.t1 || null, t2: slot.t2 || null, t1label: 'TBD', t2label: 'TBD' };
 }
 
-async function saveNote(country, text) {
-  trackerData.notes[country] = text;
-  editingNote = null;
-  renderAll();
+function formatSeedLabel(seed, matchLabel) {
+  const [grp, pos] = seed;
+  if (pos === 1) return `1${grp}`;
+  if (pos === 2) return `2${grp}`;
+  if (pos === 3) {
+    const match = matchLabel && matchLabel.match(/\(([A-Z]+)\)/);
+    const groups = match ? match[1].split('').join('/') : 'TBD';
+    return `3rd (${groups})`;
+  }
+  return '?';
+}
+
+function isMatchTimeLocked(roundId, matchIdx) {
+  let kickoff = null;
+  if (roundId === 'r32') kickoff = R32_SEEDING[matchIdx] ? R32_SEEDING[matchIdx].kickoff : null;
+  else kickoff = (ROUND_SCHEDULES[roundId] || [])[matchIdx] ? ROUND_SCHEDULES[roundId][matchIdx].kickoff : null;
+  if (!kickoff) return false;
+  return new Date() >= new Date(kickoff + '-05:00');
+}
+
+function getAutoSeededSlots(groupResults) {
+  const slots = { r32: {} };
+  R32_SEEDING.forEach((seeding, i) => {
+    const t1 = resolveTeam(seeding.t1, groupResults);
+    const t2 = resolveTeam(seeding.t2, groupResults);
+    slots.r32[i] = { t1, t2, label: seeding.label, kickoff: seeding.kickoff, venue: seeding.venue };
+  });
+  return slots;
+}
+
+async function renderBracket() {
+  renderPayBanner('pay-banner-bracket');
+  renderTiebreaker();
+  await loadOfficialData();
   try {
-    await db.collection('meta').doc(DB_PATH).set(
-      { notes: { [country]: text } },
-      { merge: true }
-    );
-  } catch(e) { toast('Note save failed'); }
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    bracketPicks = (doc.data() || {}).bracketPicks || {};
+  } catch(e) { bracketPicks = {}; }
+  const con = document.getElementById('bracket-con');
+  con.innerHTML = '';
+  const globalLocked = !!officialData.bracketLocked;
+  const isAdminUser = currentUser && (currentUser.email === ADMIN_EMAIL || currentUser.email === ADMIN_EMAIL_2);
+  const autoSlots = getAutoSeededSlots(officialData.groupResults || {});
+  ROUNDS.forEach(round => {
+    const col = document.createElement('div');
+    col.className = 'bround';
+    col.innerHTML = `<div class="rhdr">${round.name}<span class="rpts">${round.pts} pt${round.pts > 1 ? 's' : ''} each</span></div>`;
+    for (let i = 0; i < round.matches; i++) {
+      const slotData = getSlotTeams(round.id, i);
+      const { t1, t2, t1label, t2label } = slotData;
+      const key = round.id + '_' + i;
+      const picked = bracketPicks[key] || null;
+      const timeLocked = !isAdminUser && isMatchTimeLocked(round.id, i);
+      const matchLocked = globalLocked || timeLocked;
+      const sched = round.id === 'r32' ? (autoSlots.r32[i] || {}) : ((ROUND_SCHEDULES[round.id] || [])[i] || {});
+      const slot = document.createElement('div');
+      slot.className = 'mslot'; slot.style.flex = '1';
+      slot.style.minHeight = Math.max(62, 400 / round.matches) + 'px';
+      if (sched.kickoff) {
+        const timeEl = document.createElement('div');
+        timeEl.className = 'match-label';
+        const d = new Date(sched.kickoff + '-05:00');
+        const dateStr = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: 'America/Chicago' });
+        timeEl.textContent = (sched.venue ? sched.venue + ' · ' : '') + dateStr + (timeLocked && !isAdminUser ? ' 🔒' : '');
+        slot.appendChild(timeEl);
+      }
+      const card = document.createElement('div');
+      card.className = 'mcard';
+      [[t1, t1label], [t2, t2label]].forEach(([team, label]) => {
+        const isKnown = !!team;
+        const row = document.createElement('div');
+        row.className = 'bteam' + (!isKnown ? ' tbd' : '') + (picked === team ? ' sel' : '');
+        if (isKnown) {
+          row.innerHTML = `${flagImg(team, true)}<span>${team}</span>`;
+          if (!matchLocked) row.onclick = () => pickWinner(round.id, i, team);
+          if (matchLocked && picked !== team) row.style.opacity = '0.6';
+        } else {
+          row.innerHTML = `<span style="color:#888;font-size:11px;font-style:italic;font-weight:600">${label || 'TBD'}</span>`;
+        }
+        card.appendChild(row);
+      });
+      slot.appendChild(card);
+      col.appendChild(slot);
+    }
+    con.appendChild(col);
+  });
 }
 
-function setFilter(f, btn) {
-  currentFilter = f;
+async function pickWinner(roundId, matchIdx, team) {
+  const key = roundId + '_' + matchIdx;
+  bracketPicks[key] = team;
+  try { await db.collection('users').doc(currentUser.uid).update({ ['bracketPicks.' + key]: team }); } catch(e) {}
+  renderBracket();
+}
+
+async function saveBracket() {
+  if (officialData.bracketLocked) { toast('Bracket picks are locked!', true); return; }
+  try {
+    await db.collection('users').doc(currentUser.uid).update({ bracketPicks });
+    toast('Bracket picks saved! ✓');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+// ══════════════════════════════════════════════
+// SCHEDULE / SCORES
+// ══════════════════════════════════════════════
+let scheduleData = null;       // raw matches array from openfootball
+let scoresFilter = 'all';      // current filter
+let scoresLastFetch = null;    // timestamp of last successful fetch
+
+// Parse openfootball time string into a local Date
+// Time format: "13:00 UTC-6", "20:00 UTC-4", etc.
+function parseMatchDate(dateStr, timeStr) {
+  // Extract UTC offset
+  const match = timeStr.match(/(\d{2}):(\d{2})\s+UTC([+-]\d+)/);
+  if (!match) return new Date(dateStr);
+  const [, hh, mm, off] = match;
+  const offsetMin = parseInt(off) * 60;
+  // Build an ISO string
+  const iso = `${dateStr}T${hh}:${mm}:00`;
+  const d = new Date(iso);
+  // Shift by offset to get UTC, then local
+  d.setMinutes(d.getMinutes() - offsetMin);
+  return d; // This is now the correct moment in time
+}
+
+function isGroupMatch(m) {
+  return !!m.group;
+}
+
+function isKnockoutMatch(m) {
+  return !m.group;
+}
+
+function isToday(d) {
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+         d.getMonth() === now.getMonth() &&
+         d.getDate() === now.getDate();
+}
+
+function formatMatchTime(d) {
+  return d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+}
+
+function formatDayHeader(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00'); // noon local, avoids DST edge cases
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
+function setScoresFilter(f, btn) {
+  scoresFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  renderList();
+  btn.classList.add('active');
+  renderScoresList();
 }
 
-function renderAll() {
-  renderProgress();
-  renderList();
-}
-
-function renderProgress() {
-  const done = BEERS.filter(b => trackerData.drank[b.country]).length;
-  const pct = Math.round(done / BEERS.length * 100);
-  document.getElementById('prog-fill').style.width = pct + '%';
-  document.getElementById('prog-pct').textContent = done + ' of ' + BEERS.length + ' beers downed';
-  document.getElementById('prog-num').textContent = pct + '%';
-  document.getElementById('btn-remaining').textContent = 'Remaining (' + (BEERS.length - done) + ')';
-  document.getElementById('btn-done').textContent = 'Done (' + done + ')';
-  document.getElementById('win-banner').classList.toggle('show', done === BEERS.length);
-}
-
-function renderList() {
-  const done = country => trackerData.drank[country];
-  let filtered = BEERS.filter(b => {
-    if (currentFilter === 'done') return done(b.country);
-    if (currentFilter === 'remaining') return !done(b.country);
-    if (currentFilter.startsWith('group-')) return b.group === currentFilter.replace('group-','');
-    return true;
-  });
-
-  const list = document.getElementById('beer-list');
-  if (!filtered.length) {
-    list.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,.3);padding:3rem;font-size:14px">' +
-      (currentFilter === 'done' ? 'Nothing checked off yet. Go drink.' : '🎉 All done!') + '</div>';
+async function loadScheduleData(forceRefresh = false) {
+  // Throttle: don't re-fetch within 2 minutes unless forced
+  if (!forceRefresh && scheduleData && scoresLastFetch && (Date.now() - scoresLastFetch < 120000)) {
+    renderScoresList();
     return;
   }
 
-  // Group by World Cup group
-  const byGroup = {};
-  filtered.forEach(b => {
-    if (!byGroup[b.group]) byGroup[b.group] = [];
-    byGroup[b.group].push(b);
-  });
+  const btn = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  if (btn) btn.classList.add('spinning');
 
-  let html = '';
-  const showGroupHeaders = !currentFilter.startsWith('group-');
-  Object.keys(byGroup).sort().forEach(gid => {
-    if (showGroupHeaders) {
-      html += `<div class="group-hdr">GROUP ${gid}</div>`;
-    }
-    byGroup[gid].forEach(b => {
-      const isDone = done(b.country);
-      const note = trackerData.notes[b.country] || '';
-      const isEditing = editingNote === b.country;
-      html += `
-        <div class="beer-card ${isDone ? 'done' : ''}" id="card-${b.country.replace(/[^a-z]/gi,'')}">
-          <button class="check-btn" onclick="toggleDrank('${b.country}')">${isDone ? '✓' : ''}</button>
-          <div class="beer-flag">${b.flag}</div>
-          <div class="beer-info">
-            <div class="beer-name">${b.beer}</div>
-            <div class="beer-meta">${b.country}</div>
-            <span class="beer-where">📍 ${b.where}</span>
-            <div class="note-area">
-              ${isEditing ? `
-                <div class="note-edit-row">
-                  <input class="note-input" id="note-input-${b.country.replace(/[^a-z]/gi,'')}" placeholder="Add a tasting note..." value="${esc(note)}" onkeydown="if(event.key==='Enter') saveNoteFromInput('${b.country}')" />
-                  <button class="btn-sm btn-save" onclick="saveNoteFromInput('${b.country}')">Save</button>
-                  <button class="btn-sm btn-cancel" onclick="cancelNote()">✕</button>
-                </div>
-              ` : note ? `
-                <div class="note-display">
-                  <span>💬 ${esc(note)}</span>
-                  <button class="note-btn" onclick="startEditNote('${b.country}', '${esc(note).replace(/'/g,"\\'")}')">✏️</button>
-                </div>
-              ` : `
-                <button class="note-btn" onclick="startEditNote('${b.country}', '')">📝 Add note</button>
-              `}
-            </div>
-          </div>
-        </div>`;
-    });
-  });
-  list.innerHTML = html;
-
-  // Focus note input if editing
-  if (editingNote) {
-    const inp = document.getElementById('note-input-' + editingNote.replace(/[^a-z]/gi,''));
-    if (inp) { inp.focus(); inp.select(); }
+  try {
+    const resp = await fetch(SCORES_DATA_URL + '?_=' + Date.now());
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    scheduleData = json.matches || [];
+    scoresLastFetch = Date.now();
+    const updEl = document.getElementById('scores-last-updated');
+    if (updEl) updEl.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    renderScoresList();
+  } catch(e) {
+    const container = document.getElementById('scores-container');
+    if (container) container.innerHTML = `<div class="no-matches">⚠️ Could not load schedule data.<br><span style="font-size:12px;opacity:.6">Check your connection and try refreshing.</span></div>`;
+  } finally {
+    if (btn) btn.classList.remove('spinning');
   }
 }
 
-function startEditNote(country, current) {
-  editingNote = country;
-  renderList();
+function renderScoresList() {
+  const container = document.getElementById('scores-container');
+  if (!container) return;
+  if (!scheduleData) { loadScheduleData(); return; }
+
+  const now = new Date();
+
+  // Filter matches
+  let filtered = scheduleData.filter(m => {
+    const d = m.time ? parseMatchDate(m.date, m.time) : new Date(m.date + 'T12:00:00');
+    const hasScore = m.score && m.score.ft;
+    if (scoresFilter === 'today') return isToday(d);
+    if (scoresFilter === 'results') return hasScore;
+    if (scoresFilter === 'upcoming') return !hasScore;
+    if (scoresFilter === 'group') return isGroupMatch(m);
+    if (scoresFilter === 'knockout') return isKnockoutMatch(m);
+    return true;
+  });
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="no-matches">No matches found for this filter.</div>`;
+    return;
+  }
+
+  // Sort by date+time
+  filtered.sort((a, b) => {
+    const da = a.time ? parseMatchDate(a.date, a.time) : new Date(a.date);
+    const db2 = b.time ? parseMatchDate(b.date, b.time) : new Date(b.date);
+    return da - db2;
+  });
+
+  // Group by date
+  const byDate = {};
+  filtered.forEach(m => {
+    if (!byDate[m.date]) byDate[m.date] = [];
+    byDate[m.date].push(m);
+  });
+
+  let html = '';
+  Object.keys(byDate).sort().forEach(dateStr => {
+    const dayMatches = byDate[dateStr];
+    const isDateToday = isToday(new Date(dateStr + 'T12:00:00'));
+    html += `<div class="scores-day">
+      <div class="scores-day-hdr">
+        ${formatDayHeader(dateStr)}
+        ${isDateToday ? '<span class="day-label">TODAY</span>' : ''}
+      </div>`;
+    dayMatches.forEach(m => {
+      const matchDate = m.time ? parseMatchDate(m.date, m.time) : new Date(m.date + 'T12:00:00');
+      const hasScore = m.score && m.score.ft;
+      const score1 = hasScore ? m.score.ft[0] : null;
+      const score2 = hasScore ? m.score.ft[1] : null;
+      const isPending = !hasScore;
+      const isMatchToday = isToday(matchDate);
+
+      // Badge: group or round label
+      let badgeHtml = '';
+      if (m.group) {
+        badgeHtml = `<span class="match-group-badge">${m.group}</span>`;
+      } else {
+        badgeHtml = `<span class="match-round-badge">${m.round || 'Knockout'}</span>`;
+      }
+
+      // Score display
+      let scoreHtml = '';
+      if (hasScore) {
+        scoreHtml = `
+          <div class="match-ft-label">FT</div>
+          <div class="match-score${isMatchToday ? ' today-score' : ''}">${score1} – ${score2}</div>
+        `;
+      } else {
+        const timeLabel = m.time ? formatMatchTime(matchDate) : 'TBD';
+        scoreHtml = `<div class="match-score pending">${timeLabel}</div>`;
+      }
+
+      // Team names — normalize to match our team list
+      const t1 = m.team1 || '?';
+      const t2 = m.team2 || '?';
+      const flag1 = flagImg(t1, true);
+      const flag2 = flagImg(t2, true);
+
+      html += `
+        <div class="match-card ${hasScore ? 'finished' : ''} ${isMatchToday && !hasScore ? 'today' : ''}">
+          <div class="match-team home">
+            ${flag1}
+            <span class="match-team-name">${t1}</span>
+          </div>
+          <div class="match-center">
+            ${badgeHtml}
+            ${scoreHtml}
+            <div class="match-meta">${m.ground || ''}</div>
+          </div>
+          <div class="match-team away">
+            ${flag2}
+            <span class="match-team-name">${t2}</span>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
 }
 
-function cancelNote() {
-  editingNote = null;
-  renderList();
+function renderScores() {
+  // Reset to 'all' filter each time tab is opened
+  scoresFilter = 'all';
+  document.querySelectorAll('.filter-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === 0);
+  });
+  loadScheduleData();
 }
 
-function saveNoteFromInput(country) {
-  const inp = document.getElementById('note-input-' + country.replace(/[^a-z]/gi,''));
-  const val = inp ? inp.value.trim() : '';
-  saveNote(country, val);
+// ══════════════════════════════════════════════
+// LEADERBOARD
+// ══════════════════════════════════════════════
+async function renderLeaderboard() {
+  document.getElementById('lb-rows').innerHTML = '<div class="spin-wrap" style="padding:2rem"><div class="spinner"></div></div>';
+  await loadOfficialData();
+  try {
+    const snap = await db.collection('users').get();
+    const players = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      const gs = calcGroupScore(d.picks || {});
+      const bs = calcBracketScore(d.bracketPicks || {});
+      const maxPoss = calcMaxPossibleForPlayer(d.picks || {}, d.bracketPicks || {});
+      players.push({ uid: doc.id, name: d.displayName || d.email, gs, bs, total: gs + bs, maxPoss, tb: d.tiebreaker, paid: !!d.paid, picks: d.picks || {}, bracketPicks: d.bracketPicks || {} });
+    });
+    const fg = officialData.finalGoals != null ? officialData.finalGoals : null;
+    players.sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      if (fg != null && a.tb != null && b.tb != null) return Math.abs(a.tb - fg) - Math.abs(b.tb - fg);
+      return 0;
+    });
+    const rows = document.getElementById('lb-rows');
+    rows.innerHTML = '';
+    if (!players.length) { rows.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted);font-size:14px">No players yet.</div>'; return; }
+    const medals = ['g','s','b'];
+    players.forEach((p, i) => {
+      const isMe = currentUser && p.uid === currentUser.uid;
+      const row = document.createElement('div');
+      row.className = 'lbrow' + (isMe ? ' me' : '') + (!p.paid ? ' unpaid' : '');
+      row.innerHTML = `
+        <span class="rnum ${medals[i]||''}">${i+1}</span>
+        <span class="pname pname-link">${p.name}${isMe ? ' <span style="font-size:11px;color:var(--green)">(you)</span>' : ''}</span>
+        <span style="text-align:center"><span class="paid-badge ${p.paid ? 'yes' : 'no'}">${p.paid ? '✓' : '✗'}</span></span>
+        <span class="sscore">${p.gs}</span>
+        <span class="sscore">${p.bs}</span>
+        <span class="scell sval">${p.total}</span>
+        <span class="scell" style="text-align:right;color:var(--muted);font-size:12px">${p.maxPoss}</span>
+      `;
+      row.querySelector('.pname-link').onclick = (e) => { e.stopPropagation(); openPicksModal(p); };
+      rows.appendChild(row);
+    });
+  } catch(e) { document.getElementById('lb-rows').innerHTML = '<div style="padding:2rem;color:#c0392b;font-size:13px">Error: ' + e.message + '</div>'; }
 }
 
-function setSyncStatus(type, msg) {
-  const el = document.getElementById('sync-bar');
-  el.textContent = msg;
-  el.className = 'sync-bar' + (type === 'syncing' ? ' syncing' : type === 'error' ? ' error' : '');
+// ══════════════════════════════════════════════
+// PICKS VIEWER MODAL
+// ══════════════════════════════════════════════
+function openPicksModal(player) {
+  document.getElementById('picks-modal-title').textContent = player.name + "'s Picks";
+  const body = document.getElementById('picks-modal-body');
+  body.innerHTML = '';
+  const offGroups = officialData.groupResults || {};
+  const offBracket = officialData.bracketResults || {};
+  const scoreRow = document.createElement('div');
+  scoreRow.className = 'picks-score-row';
+  scoreRow.innerHTML = `
+    <div class="picks-score-chip"><div class="val">${player.gs}</div><div class="lbl">Group pts</div></div>
+    <div class="picks-score-chip"><div class="val">${player.bs}</div><div class="lbl">Bracket pts</div></div>
+    <div class="picks-score-chip"><div class="val">${player.total}</div><div class="lbl">Total</div></div>
+    ${player.tb != null ? `<div class="picks-score-chip"><div class="val">${player.tb}</div><div class="lbl">Final goals guess</div></div>` : ''}
+  `;
+  body.appendChild(scoreRow);
+  const groupTitle = document.createElement('div');
+  groupTitle.className = 'picks-section-title';
+  groupTitle.textContent = 'GROUP STAGE PICKS';
+  body.appendChild(groupTitle);
+  const groupGrid = document.createElement('div');
+  groupGrid.className = 'picks-groups-grid';
+  Object.keys(GROUPS).forEach(gid => {
+    const pick = player.picks[gid] || GROUPS[gid];
+    const official = offGroups[gid] || null;
+    const card = document.createElement('div');
+    card.className = 'picks-group-card';
+    card.innerHTML = `<div class="picks-group-hdr">GROUP ${gid}</div>`;
+    pick.forEach((team, idx) => {
+      const row = document.createElement('div');
+      let statusClass = '';
+      if (official) statusClass = official[idx] === team ? 'correct' : 'wrong';
+      row.className = 'picks-team-row ' + statusClass;
+      row.innerHTML = `<div class="picks-pos ${idx < 2 ? 'q' : 'out'}">${idx + 1}</div>${flagImg(team, true)}<span style="flex:1">${team}</span>${official ? (official[idx] === team ? '<span style="color:var(--green);font-size:11px">✓</span>' : '<span style="color:var(--red);font-size:11px">✗</span>') : ''}`;
+      card.appendChild(row);
+    });
+    groupGrid.appendChild(card);
+  });
+  body.appendChild(groupGrid);
+  const bracketTitle = document.createElement('div');
+  bracketTitle.className = 'picks-section-title';
+  bracketTitle.style.marginTop = '1.5rem';
+  bracketTitle.textContent = 'BRACKET PICKS';
+  body.appendChild(bracketTitle);
+  const pts = { r32: 1, r16: 2, qf: 4, sf: 8, f: 16 };
+  const roundNames = { r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', f: 'Final' };
+  const bracketGrid = document.createElement('div');
+  bracketGrid.className = 'picks-bracket-grid';
+  let hasBracketPicks = false;
+  ROUNDS.forEach(round => {
+    for (let i = 0; i < round.matches; i++) {
+      const key = round.id + '_' + i;
+      const pick = player.bracketPicks[key];
+      if (!pick) continue;
+      hasBracketPicks = true;
+      const official = offBracket[key] || null;
+      const isCorrect = official && official === pick;
+      const isWrong = official && official !== pick;
+      const card = document.createElement('div');
+      card.className = 'picks-bracket-card';
+      card.innerHTML = `<div class="picks-bracket-round">${roundNames[round.id]} M${i + 1} · ${pts[round.id]}pt${pts[round.id] > 1 ? 's' : ''}</div>`;
+      const pickRow = document.createElement('div');
+      pickRow.className = 'picks-bracket-pick' + (isCorrect ? ' correct' : isWrong ? ' wrong' : '');
+      pickRow.innerHTML = `${flagImg(pick, true)}<span>${pick}</span>${isCorrect ? ' ✓' : isWrong ? ' ✗' : ''}`;
+      card.appendChild(pickRow);
+      bracketGrid.appendChild(card);
+    }
+  });
+  if (!hasBracketPicks) {
+    const empty = document.createElement('p');
+    empty.style.cssText = 'color:var(--muted);font-size:13px;padding:.5rem 0';
+    empty.textContent = 'No bracket picks submitted yet.';
+    body.appendChild(empty);
+  } else {
+    body.appendChild(bracketGrid);
+  }
+  document.getElementById('picks-modal').style.display = 'flex';
 }
 
-function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function closePicksModal(e) {
+  if (!e || e.target === document.getElementById('picks-modal')) {
+    document.getElementById('picks-modal').style.display = 'none';
+  }
 }
 
-function toast(msg) {
+function calcMaxPossibleForPlayer(groupPicks, bPicks) {
+  const offGroups = officialData.groupResults || {};
+  const offBracket = officialData.bracketResults || {};
+  const pts = { r32:1, r16:2, qf:4, sf:8, f:16 };
+  const undecidedGroupPts = (Object.keys(GROUPS).length - Object.keys(offGroups).length) * 4;
+  let bracketStillPossible = 0;
+  ROUNDS.forEach(round => {
+    for (let i = 0; i < round.matches; i++) {
+      const key = round.id + '_' + i;
+      if (!offBracket[key] && bPicks[key]) bracketStillPossible += pts[round.id];
+    }
+  });
+  return calcGroupScore(groupPicks) + calcBracketScore(bPicks) + undecidedGroupPts + bracketStillPossible;
+}
+
+function calcGroupScore(picks) {
+  const off = officialData.groupResults || {};
+  let s = 0;
+  Object.keys(GROUPS).forEach(gid => {
+    const o = off[gid], p = picks[gid];
+    if (!o || !p) return;
+    p.forEach((team, idx) => { if (o[idx] === team) s++; });
+  });
+  return s;
+}
+
+function calcBracketScore(picks) {
+  const off = officialData.bracketResults || {};
+  const pts = { r32:1, r16:2, qf:4, sf:8, f:16 };
+  let s = 0;
+  Object.keys(picks).forEach(key => { if (off[key] && off[key] === picks[key]) s += (pts[key.split('_')[0]] || 0); });
+  return s;
+}
+
+// ══════════════════════════════════════════════
+// ADMIN
+// ══════════════════════════════════════════════
+async function renderAdmin() {
+  await loadOfficialData();
+  renderAdminPayments();
+  renderAdminGroups();
+  renderAdminBracket();
+  renderAdminDMInbox();
+  const fg = officialData.finalGoals;
+  if (fg != null) document.getElementById('admin-final-goals').value = fg;
+}
+
+async function renderAdminPayments() {
+  const wrap = document.getElementById('pay-admin-grid');
+  wrap.innerHTML = '<div style="color:var(--muted);font-size:13px">Loading players...</div>';
+  try {
+    const snap = await db.collection('users').get();
+    allUsers = {};
+    snap.forEach(doc => { allUsers[doc.id] = doc.data(); });
+    wrap.innerHTML = '';
+    if (!Object.keys(allUsers).length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:13px">No players yet.</p>'; return; }
+    Object.entries(allUsers).forEach(([uid, d]) => {
+      const paid = !!d.paid;
+      const card = document.createElement('div');
+      card.className = 'pay-card';
+      card.innerHTML = `
+        <div><div class="pn">${d.displayName || 'Unknown'}</div><div class="pe">${d.email || ''}</div></div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <div class="pay-toggle">
+            <button class="btn-paid yes ${paid ? 'active' : ''}" onclick="setPayment('${uid}', true)">Paid</button>
+            <button class="btn-paid no ${!paid ? 'active' : ''}" onclick="setPayment('${uid}', false)">Unpaid</button>
+          </div>
+          <button onclick="deleteUser('${uid}', '${(d.displayName || 'this user').replace(/'/g,"\\'")}') " style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;font-family:var(--fb);padding:0">🗑 Delete user</button>
+        </div>
+      `;
+      wrap.appendChild(card);
+    });
+  } catch(e) { wrap.innerHTML = '<p style="color:#c0392b;font-size:13px">Error: ' + e.message + '</p>'; }
+}
+
+async function setPayment(uid, paid) {
+  try {
+    await db.collection('users').doc(uid).update({ paid });
+    toast(paid ? '✅ Marked as Paid' : '❌ Marked as Unpaid');
+    renderAdminPayments();
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function deleteUser(uid, name) {
+  if (!confirm(`Delete ${name}? This will permanently remove all their picks and data. This cannot be undone.`)) return;
+  try {
+    await db.collection('users').doc(uid).delete();
+    toast(`${name} deleted`);
+    renderAdminPayments();
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+function renderAdminGroups() {
+  const wrap = document.getElementById('admin-groups');
+  wrap.innerHTML = '';
+  const off = officialData.groupResults || {};
+  Object.keys(GROUPS).forEach(gid => {
+    const card = document.createElement('div');
+    card.className = 'agcard';
+    card.innerHTML = `<h4>Group ${gid}</h4>`;
+    const current = off[gid] || ['','','',''];
+    [1,2,3,4].forEach(pos => {
+      const row = document.createElement('div');
+      row.className = 'agrow';
+      row.innerHTML = `<label>${pos}</label>`;
+      const sel = document.createElement('select');
+      sel.id = `ag-${gid}-${pos}`;
+      sel.innerHTML = '<option value="">— Select —</option>' + GROUPS[gid].map(t => `<option value="${t}" ${current[pos-1]===t?'selected':''}>${t}</option>`).join('');
+      row.appendChild(sel);
+      card.appendChild(row);
+    });
+    wrap.appendChild(card);
+  });
+}
+
+function renderAdminBracket() {
+  const wrap = document.getElementById('admin-bracket');
+  wrap.innerHTML = '';
+  const slots = officialData.bracketSlots || {};
+  const results = officialData.bracketResults || {};
+  const groupResults = officialData.groupResults || {};
+  const autoSlots = getAutoSeededSlots(groupResults);
+  const ALL = Object.values(GROUPS).flat();
+
+  const r32Hdr = document.createElement('div');
+  r32Hdr.style.cssText = 'color:var(--gold);font-size:13px;font-weight:600;margin-bottom:8px;grid-column:1/-1';
+  r32Hdr.textContent = 'Round of 32 — teams auto-seeded from group results (edit only if needed)';
+  wrap.appendChild(r32Hdr);
+
+  for (let i = 0; i < 16; i++) {
+    const key = 'r32_' + i;
+    const auto = (autoSlots.r32 || {})[i] || {};
+    const manual = ((slots.r32 || {})[i]) || {};
+    const t1 = manual.t1 || auto.t1 || '';
+    const t2 = manual.t2 || auto.t2 || '';
+    const winner = results[key] || '';
+    const card = document.createElement('div');
+    card.className = 'abcard';
+    card.innerHTML = `<h5>Match ${i+1} ${auto.t1 ? `<span style="color:var(--green);font-size:10px">(${auto.t1||'TBD'} vs ${auto.t2||'TBD'})</span>` : ''}</h5>`;
+    ['Team 1','Team 2'].forEach((label, ti) => {
+      const teamKey = ti === 0 ? 't1' : 't2';
+      const cur = ti === 0 ? t1 : t2;
+      const lbl = document.createElement('label'); lbl.textContent = label + ' (override)';
+      const sel = document.createElement('select');
+      sel.id = `abs-r32-${i}-${teamKey}`;
+      sel.innerHTML = `<option value="">— Auto (${(ti === 0 ? auto.t1 : auto.t2) || 'TBD'}) —</option>` + ALL.map(t => `<option value="${t}" ${cur===t?'selected':''}>${t}</option>`).join('');
+      card.appendChild(lbl); card.appendChild(sel);
+    });
+    const winLbl = document.createElement('label'); winLbl.textContent = 'Official Winner';
+    const winSel = document.createElement('select');
+    winSel.id = `abr-${key}`;
+    const teams = [t1 || auto.t1, t2 || auto.t2].filter(t => t && t !== 'TBD');
+    winSel.innerHTML = '<option value="">— Winner —</option>' + teams.map(t => `<option value="${t}" ${winner===t?'selected':''}>${t}</option>`).join('');
+    card.appendChild(winLbl); card.appendChild(winSel);
+    wrap.appendChild(card);
+  }
+
+  ['r16','qf','sf','f'].forEach(rid => {
+    const round = ROUNDS.find(r => r.id === rid);
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'color:var(--gold);font-size:13px;font-weight:600;margin:16px 0 8px;grid-column:1/-1';
+    hdr.textContent = round.name;
+    wrap.appendChild(hdr);
+    for (let i = 0; i < round.matches; i++) {
+      const key = rid + '_' + i;
+      const slot = ((slots[rid] || {})[i]) || {};
+      const winner = results[key] || '';
+      const card = document.createElement('div');
+      card.className = 'abcard';
+      card.innerHTML = `<h5>Match ${i+1}</h5>`;
+      ['Team 1','Team 2'].forEach((label, ti) => {
+        const teamKey = ti === 0 ? 't1' : 't2';
+        const lbl = document.createElement('label'); lbl.textContent = label;
+        const sel = document.createElement('select');
+        sel.id = `abs-${rid}-${i}-${teamKey}`;
+        sel.innerHTML = '<option value="">— TBD —</option>' + ALL.map(t => `<option value="${t}" ${slot[teamKey]===t?'selected':''}>${t}</option>`).join('');
+        card.appendChild(lbl); card.appendChild(sel);
+      });
+      const winLbl = document.createElement('label'); winLbl.textContent = 'Official Winner';
+      const winSel = document.createElement('select');
+      winSel.id = `abr-${key}`;
+      const t1 = slot.t1 || '', t2 = slot.t2 || '';
+      winSel.innerHTML = '<option value="">— Winner —</option>' + [t1,t2].filter(Boolean).map(t => `<option value="${t}" ${winner===t?'selected':''}>${t}</option>`).join('');
+      card.appendChild(winLbl); card.appendChild(winSel);
+      wrap.appendChild(card);
+    }
+  });
+}
+
+// ══════════════════════════════════════════════
+// AUTO-FILL FROM LIVE DATA (openfootball feed)
+// Pre-fills the admin dropdowns; admin reviews and Saves.
+// Nothing is committed to Firestore until Save is clicked.
+// ══════════════════════════════════════════════
+const CANONICAL_TEAMS = Object.values(GROUPS).flat();
+const TEAM_ALIASES = {
+  'turkey':'Türkiye','turkiye':'Türkiye',
+  'korea republic':'South Korea','republic of korea':'South Korea','korea, republic of':'South Korea',
+  'ir iran':'Iran',
+  "cote d'ivoire":'Ivory Coast','côte d’ivoire':'Ivory Coast',
+  'czechia':'Czech Republic',
+  'congo dr':'DR Congo','democratic republic of the congo':'DR Congo','dr congo':'DR Congo','congo':'DR Congo',
+  'cabo verde':'Cape Verde',
+  'united states':'USA','united states of america':'USA',
+  'bosnia and herzegovina':'Bosnia & Herzegovina','bosnia-herzegovina':'Bosnia & Herzegovina'
+};
+function stripDiacritics(s){ return s.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normalizeTeam(name) {
+  if (!name) return null;
+  const raw = String(name).trim();
+  if (CANONICAL_TEAMS.includes(raw)) return raw;
+  const key = stripDiacritics(raw.toLowerCase());
+  if (TEAM_ALIASES[key]) return TEAM_ALIASES[key];
+  const hit = CANONICAL_TEAMS.find(t => stripDiacritics(t.toLowerCase()) === key);
+  return hit || null; // null = placeholder / unknown team
+}
+function isRealTeam(name){ return normalizeTeam(name) !== null; }
+
+// Fetch the latest feed (forces fresh copy for accuracy)
+async function fetchFreshSchedule() {
+  try {
+    const resp = await fetch(SCORES_DATA_URL + '?_=' + Date.now());
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    scheduleData = json.matches || [];
+    scoresLastFetch = Date.now();
+    return scheduleData;
+  } catch(e) { return null; }
+}
+
+// ── GROUP STANDINGS ──
+function computeGroupStandings(gid, matches) {
+  const table = {};
+  GROUPS[gid].forEach(t => table[t] = { team:t, pts:0, gf:0, ga:0, gd:0, played:0 });
+  const groupMatches = matches.filter(m =>
+    m.group === ('Group ' + gid) && m.score && m.score.ft &&
+    isRealTeam(m.team1) && isRealTeam(m.team2)
+  );
+  groupMatches.forEach(m => {
+    const a = normalizeTeam(m.team1), b = normalizeTeam(m.team2);
+    if (!table[a] || !table[b]) return;
+    const [s1, s2] = m.score.ft;
+    table[a].gf += s1; table[a].ga += s2; table[a].played++;
+    table[b].gf += s2; table[b].ga += s1; table[b].played++;
+    if (s1 > s2) table[a].pts += 3;
+    else if (s2 > s1) table[b].pts += 3;
+    else { table[a].pts++; table[b].pts++; }
+  });
+  Object.values(table).forEach(r => r.gd = r.gf - r.ga);
+  let rows = Object.values(table).sort((x,y) => y.pts - x.pts || y.gd - x.gd || y.gf - x.gf);
+  rows = applyHeadToHead(rows, groupMatches);
+  return { order: rows.map(r => r.team), played: groupMatches.length, complete: groupMatches.length >= 6 };
+}
+
+// Break ties (equal pts/gd/gf) using head-to-head among the tied teams
+function applyHeadToHead(rows, groupMatches) {
+  const out = [];
+  let i = 0;
+  while (i < rows.length) {
+    let j = i;
+    while (j + 1 < rows.length &&
+           rows[j+1].pts === rows[i].pts &&
+           rows[j+1].gd === rows[i].gd &&
+           rows[j+1].gf === rows[i].gf) j++;
+    if (j > i) {
+      const tied = rows.slice(i, j + 1);
+      const names = new Set(tied.map(r => r.team));
+      const mini = {};
+      tied.forEach(r => mini[r.team] = { pts:0, gd:0, gf:0 });
+      groupMatches.forEach(m => {
+        const a = normalizeTeam(m.team1), b = normalizeTeam(m.team2);
+        if (names.has(a) && names.has(b)) {
+          const [s1, s2] = m.score.ft;
+          mini[a].gf += s1; mini[b].gf += s2;
+          mini[a].gd += (s1 - s2); mini[b].gd += (s2 - s1);
+          if (s1 > s2) mini[a].pts += 3; else if (s2 > s1) mini[b].pts += 3; else { mini[a].pts++; mini[b].pts++; }
+        }
+      });
+      tied.sort((x,y) => mini[y.team].pts - mini[x.team].pts || mini[y.team].gd - mini[x.team].gd || mini[y.team].gf - mini[x.team].gf);
+      tied.forEach(r => out.push(r));
+    } else {
+      out.push(rows[i]);
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
+async function autoFillGroupResults() {
+  toast('Fetching live results…');
+  const matches = await fetchFreshSchedule();
+  if (!matches) { toast('Could not load live data — check connection', true); return; }
+  let filled = 0, incomplete = 0;
+  Object.keys(GROUPS).forEach(gid => {
+    const s = computeGroupStandings(gid, matches);
+    if (s.played === 0) return;
+    s.order.forEach((team, idx) => {
+      const el = document.getElementById(`ag-${gid}-${idx+1}`);
+      if (el) el.value = team;
+    });
+    filled++;
+    if (!s.complete) incomplete++;
+  });
+  if (!filled) { toast('No completed group matches found yet', true); return; }
+  toast(incomplete
+    ? `Pre-filled ${filled} group(s) — ${incomplete} not finished yet. Review & Save.`
+    : `Pre-filled ${filled} group(s). Review & Save.`);
+}
+
+// ── KNOCKOUT ──
+function deriveKnockoutWinner(m) {
+  if (!m || !m.score) return null;
+  const sc = m.score;
+  if (Array.isArray(sc.p)  && sc.p[0] !== sc.p[1])   return sc.p[0]  > sc.p[1]  ? m.team1 : m.team2;
+  if (Array.isArray(sc.et) && sc.et[0] !== sc.et[1]) return sc.et[0] > sc.et[1] ? m.team1 : m.team2;
+  if (Array.isArray(sc.ft) && sc.ft[0] !== sc.ft[1]) return sc.ft[0] > sc.ft[1] ? m.team1 : m.team2;
+  return null; // not finished, or tie with no shootout recorded
+}
+
+function classifyKnockoutRound(roundStr) {
+  if (!roundStr) return null;
+  const s = roundStr.toLowerCase();
+  if (s.includes('third') || s.includes('3rd')) return null; // skip 3rd-place playoff
+  if (s.includes('32')) return 'r32';
+  if (s.includes('16')) return 'r16';
+  if (s.includes('quarter') || s.includes('qf')) return 'qf';
+  if (s.includes('semi') || s.includes('sf')) return 'sf';
+  if (s.includes('final')) return 'f';
+  return null;
+}
+
+// Rebuild a winner <select>'s options to the given two teams, then set winner
+function setWinnerSelect(key, t1, t2, winner) {
+  const sel = document.getElementById('abr-' + key);
+  if (!sel) return;
+  const teams = [t1, t2].filter(Boolean);
+  sel.innerHTML = '<option value="">— Winner —</option>' +
+    teams.map(t => `<option value="${t}" ${winner===t?'selected':''}>${t}</option>`).join('');
+  if (winner) sel.value = winner;
+}
+function setTeamSelect(id, value) {
+  const el = document.getElementById(id);
+  if (el && value) el.value = value;
+}
+
+async function autoFillKnockout() {
+  await loadOfficialData();
+  const groupResults = officialData.groupResults || {};
+  if (!Object.keys(groupResults).length) {
+    toast('Save group results first — bracket teams come from those', true);
+    return;
+  }
+  toast('Fetching live results…');
+  const matches = await fetchFreshSchedule();
+  if (!matches) { toast('Could not load live data — check connection', true); return; }
+
+  // All knockout matches (group matches carry a "group" field)
+  const feedKO = matches.filter(m => !m.group && isRealTeam(m.team1) && isRealTeam(m.team2));
+
+  // Find a KO match in a given round that contains a specific team
+  function findByTeam(roundClass, team) {
+    return feedKO.find(m =>
+      classifyKnockoutRound(m.round) === roundClass &&
+      (normalizeTeam(m.team1) === team || normalizeTeam(m.team2) === team)
+    );
+  }
+  // Find a KO match in a round between a specific pair of teams
+  function findByPair(roundClass, a, b) {
+    return feedKO.find(m => {
+      if (classifyKnockoutRound(m.round) !== roundClass) return false;
+      const x = normalizeTeam(m.team1), y = normalizeTeam(m.team2);
+      return (x === a && y === b) || (x === b && y === a);
+    });
+  }
+
+  let resolvedWinners = 0, resolvedMatches = 0;
+
+  // ── Round of 32 ── anchor on the known group-position team in each slot,
+  // read the actual opponent (incl. best-3rd-place teams) from the feed.
+  let prev = []; // results indexed by slot: { t1, t2, winner }
+  for (let i = 0; i < 16; i++) {
+    const seed = R32_SEEDING[i];
+    const known1 = resolveTeam(seed.t1, groupResults);
+    const known2 = resolveTeam(seed.t2, groupResults);
+    const anchors = [known1, known2].filter(t => t && isRealTeam(t)).map(normalizeTeam);
+
+    let feedMatch = null;
+    for (const anchor of anchors) {
+      feedMatch = findByTeam('r32', anchor);
+      if (feedMatch) break;
+    }
+
+    if (feedMatch) {
+      const a = normalizeTeam(feedMatch.team1), b = normalizeTeam(feedMatch.team2);
+      setTeamSelect(`abs-r32-${i}-t1`, a);
+      setTeamSelect(`abs-r32-${i}-t2`, b);
+      const w = normalizeTeam(deriveKnockoutWinner(feedMatch));
+      setWinnerSelect(`r32_${i}`, a, b, w);
+      prev[i] = { t1:a, t2:b, winner:w };
+      resolvedMatches++;
+      if (w) resolvedWinners++;
+    } else {
+      // Couldn't find in feed yet — still fill any known team
+      if (known1 && isRealTeam(known1)) setTeamSelect(`abs-r32-${i}-t1`, normalizeTeam(known1));
+      if (known2 && isRealTeam(known2)) setTeamSelect(`abs-r32-${i}-t2`, normalizeTeam(known2));
+      prev[i] = { t1: known1 ? normalizeTeam(known1) : null, t2: known2 ? normalizeTeam(known2) : null, winner:null };
+    }
+  }
+
+  // ── Later rounds ── advance winners using standard bracket adjacency
+  // (slot i of next round = winners of slots 2i and 2i+1 of previous round),
+  // which matches how the player-facing bracket is laid out.
+  ['r16','qf','sf','f'].forEach(rid => {
+    const round = ROUNDS.find(r => r.id === rid);
+    const cur = [];
+    for (let i = 0; i < round.matches; i++) {
+      const a = (prev[2*i]     || {}).winner || null;
+      const b = (prev[2*i + 1] || {}).winner || null;
+      if (a) setTeamSelect(`abs-${rid}-${i}-t1`, a);
+      if (b) setTeamSelect(`abs-${rid}-${i}-t2`, b);
+      if (a && b) {
+        const feedMatch = findByPair(rid, a, b);
+        const w = feedMatch ? normalizeTeam(deriveKnockoutWinner(feedMatch)) : null;
+        setWinnerSelect(`${rid}_${i}`, a, b, w);
+        cur[i] = { t1:a, t2:b, winner:w };
+        resolvedMatches++;
+        if (w) resolvedWinners++;
+      } else {
+        cur[i] = { t1:a, t2:b, winner:null };
+      }
+    }
+    prev = cur;
+  });
+
+  if (!resolvedMatches) {
+    toast('No knockout matchups available in the feed yet', true);
+  } else {
+    toast(`Pre-filled ${resolvedMatches} matchup(s), ${resolvedWinners} winner(s). Review & Save.`);
+  }
+}
+
+async function saveAdminGroups() {
+  const groupResults = {};
+  Object.keys(GROUPS).forEach(gid => {
+    groupResults[gid] = [1,2,3,4].map(pos => { const el = document.getElementById(`ag-${gid}-${pos}`); return el ? el.value : ''; });
+  });
+  await db.collection('official').doc('results').set({ groupResults }, { merge: true });
+  await loadOfficialData();
+  toast('Group results saved! Bracket auto-seeded ✓');
+  renderAdminBracket();
+}
+
+async function saveAdminBracket() {
+  const bracketSlots = {}, bracketResults = {};
+  ROUNDS.forEach(round => {
+    bracketSlots[round.id] = {};
+    for (let i = 0; i < round.matches; i++) {
+      const t1El = document.getElementById(`abs-${round.id}-${i}-t1`);
+      const t2El = document.getElementById(`abs-${round.id}-${i}-t2`);
+      const t1 = t1El ? t1El.value : '';
+      const t2 = t2El ? t2El.value : '';
+      if (t1 || t2) bracketSlots[round.id][i] = { t1, t2 };
+      const key = round.id + '_' + i;
+      const w = (document.getElementById(`abr-${key}`) || {}).value || '';
+      if (w) bracketResults[key] = w;
+    }
+  });
+  await db.collection('official').doc('results').set({ bracketSlots, bracketResults }, { merge: true });
+  await loadOfficialData();
+  toast('Bracket results saved! ✓');
+}
+
+async function saveFinalGoals() {
+  const val = parseInt(document.getElementById('admin-final-goals').value) || 0;
+  await db.collection('official').doc('results').set({ finalGoals: val }, { merge: true });
+  await loadOfficialData();
+  toast('Final goals saved! ✓');
+}
+
+async function setLock(type, locked) {
+  const field = type === 'groups' ? 'groupsLocked' : 'bracketLocked';
+  await db.collection('official').doc('results').set({ [field]: locked }, { merge: true });
+  await loadOfficialData();
+  toast(`${type === 'groups' ? 'Group' : 'Bracket'} picks ${locked ? 'locked 🔒' : 'unlocked 🔓'}`);
+}
+
+// ══════════════════════════════════════════════
+// BACKUP / EXPORT (admin only)
+// Downloads a copy of every player's picks so the pool
+// survives even if the database becomes unavailable.
+// ══════════════════════════════════════════════
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function backupStamp() {
+  return new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+}
+
+async function exportAllPicksJSON() {
+  if (!isAdmin()) return;
+  toast('Building backup…');
+  try {
+    const snap = await db.collection('users').get();
+    const users = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      users.push({
+        uid: doc.id,
+        displayName: d.displayName || '',
+        email: d.email || '',
+        paid: !!d.paid,
+        tiebreaker: (d.tiebreaker != null ? d.tiebreaker : null),
+        picks: d.picks || {},
+        bracketPicks: d.bracketPicks || {}
+      });
+    });
+    await loadOfficialData();
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      poolName: 'World Cup 2026 Picks',
+      playerCount: users.length,
+      note: 'Full restorable backup. officialData holds entered results; users holds every player\'s picks.',
+      officialData: officialData || {},
+      users
+    };
+    downloadFile(`wc2026-picks-backup-${backupStamp()}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    toast(`Backup saved — ${users.length} players ✓`);
+  } catch(e) { toast('Export error: ' + e.message, true); }
+}
+
+async function exportAllPicksHTML() {
+  if (!isAdmin()) return;
+  toast('Building snapshot…');
+  try {
+    const snap = await db.collection('users').get();
+    await loadOfficialData();
+    const players = [];
+    snap.forEach(doc => players.push({ id: doc.id, ...doc.data() }));
+    players.sort((a,b) => (a.displayName||a.email||'').localeCompare(b.displayName||b.email||''));
+
+    const roundNames = { r32:'Round of 32', r16:'Round of 16', qf:'Quarterfinals', sf:'Semifinals', f:'Final' };
+    let body = '';
+    players.forEach(p => {
+      body += `<div class="player"><h2>${esc(p.displayName || p.email || 'Unknown')}</h2>`;
+      body += `<div class="meta">${esc(p.email||'')} &middot; Entry fee: ${p.paid ? 'PAID' : 'unpaid'}${p.tiebreaker != null ? ` &middot; Final goals guess: ${esc(p.tiebreaker)}` : ''}</div>`;
+      body += `<h3>Group Stage</h3><div class="groups">`;
+      Object.keys(GROUPS).forEach(gid => {
+        const order = (p.picks && p.picks[gid]) ? p.picks[gid] : GROUPS[gid];
+        body += `<div class="grp"><div class="gh">Group ${gid}</div><ol>` + order.map(t => `<li>${esc(t)}</li>`).join('') + `</ol></div>`;
+      });
+      body += `</div>`;
+      const bp = p.bracketPicks || {};
+      body += `<h3>Bracket Picks</h3>`;
+      if (!Object.keys(bp).length) {
+        body += `<p class="none">No bracket picks submitted.</p>`;
+      } else {
+        body += `<div class="bracket">`;
+        ROUNDS.forEach(r => {
+          const picks = [];
+          for (let i = 0; i < r.matches; i++) { const k = r.id + '_' + i; if (bp[k]) picks.push(`M${i+1}: ${esc(bp[k])}`); }
+          if (picks.length) body += `<div class="br"><div class="brh">${roundNames[r.id]}</div>${picks.map(x => `<div>${x}</div>`).join('')}</div>`;
+        });
+        body += `</div>`;
+      }
+      body += `</div>`;
+    });
+
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WC2026 Picks Snapshot</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#1a1f17;background:#fff}
+h1{border-bottom:3px solid #1a6b3a;padding-bottom:.4rem;color:#0d1b12}
+.sub{color:#666;font-size:13px;margin-bottom:2rem}
+.player{border:1px solid #ddd;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.25rem;page-break-inside:avoid}
+.player h2{margin:0 0 .2rem;color:#1a6b3a}
+.meta{font-size:12px;color:#777;margin-bottom:.75rem}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#888;margin:1rem 0 .4rem}
+.groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
+.grp{border:1px solid #eee;border-radius:6px;overflow:hidden}
+.gh{background:#1a6b3a;color:#fff;font-size:11px;font-weight:700;padding:3px 8px}
+.grp ol{margin:0;padding:4px 4px 4px 26px;font-size:12px}
+.grp li{padding:1px 0}
+.grp li:nth-child(-n+2){font-weight:700}
+.bracket{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.5rem;font-size:12px}
+.br{border:1px solid #eee;border-radius:6px;padding:6px 8px}
+.brh{font-weight:700;color:#1a6b3a;font-size:11px;margin-bottom:3px}
+.none{color:#999;font-size:12px}
+@media print{.player{border-color:#ccc}body{margin:0}}
+</style></head><body>
+<h1>&#127942; World Cup 2026 — Picks Snapshot</h1>
+<div class="sub">Exported ${esc(new Date().toLocaleString())} &middot; ${players.length} players &middot; Read-only backup. Open in any browser; use your browser's Print &rarr; Save as PDF to archive. Top 2 in each group are bolded.</div>
+${body}
+</body></html>`;
+    downloadFile(`wc2026-picks-snapshot-${backupStamp()}.html`, html, 'text/html');
+    toast(`Snapshot saved — ${players.length} players ✓`);
+  } catch(e) { toast('Export error: ' + e.message, true); }
+}
+
+// ══════════════════════════════════════════════
+// EMAIL EVERYONE (admin only) — opens admin's own mail client
+// with all players BCC'd. No backend / no API keys / addresses
+// stay private from each other.
+// ══════════════════════════════════════════════
+async function getAllPlayerEmails() {
+  const snap = await db.collection('users').get();
+  const emails = [];
+  snap.forEach(doc => { const e = (doc.data().email || '').trim(); if (e) emails.push(e); });
+  return [...new Set(emails)]; // de-dupe
+}
+
+async function emailAllPlayers(mode) {
+  if (!isAdmin()) return;
+  mode = (mode === 'cc') ? 'cc' : 'bcc';
+  toast('Gathering addresses…');
+  try {
+    const emails = await getAllPlayerEmails();
+    if (!emails.length) { toast('No player emails found', true); return; }
+    const to = currentUser.email || '';
+    const subject = encodeURIComponent('World Cup 2026 Pool');
+    const list = encodeURIComponent(emails.join(','));
+    const href = `mailto:${encodeURIComponent(to)}?${mode}=${list}&subject=${subject}`;
+    const a = document.createElement('a');
+    a.href = href;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast(`Opening ${mode.toUpperCase()} email to ${emails.length} player(s)…`);
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+async function copyAllEmails() {
+  if (!isAdmin()) return;
+  try {
+    const emails = await getAllPlayerEmails();
+    if (!emails.length) { toast('No player emails found', true); return; }
+    const text = emails.join(', ');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`Copied ${emails.length} addresses ✓`);
+    } catch(_) {
+      window.prompt('Copy these addresses (Ctrl/Cmd+C):', text);
+    }
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+// ══════════════════════════════════════════════
+// MESSAGE BOARD
+// ══════════════════════════════════════════════
+let boardUnsubscribe = null, dmUnsubscribe = null, adminDmUnsubscribe = null;
+
+function isAdmin() {
+  return currentUser && (currentUser.email === ADMIN_EMAIL || currentUser.email === ADMIN_EMAIL_2);
+}
+
+function initials(name) {
+  if (!name) return '?';
+  return name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const diff = Math.floor((Date.now() - d) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function renderBoardMessage(msg, containerId, isMine, isAdminMsg) {
+  const el = document.createElement('div');
+  el.className = 'board-msg' + (isMine ? ' mine' : '') + (isAdminMsg ? ' admin-msg' : '');
+  const av = document.createElement('div');
+  av.className = 'board-avatar' + (isAdminMsg ? ' admin-av' : '');
+  av.textContent = initials(msg.displayName);
+  const bubble = document.createElement('div');
+  bubble.className = 'board-bubble';
+  bubble.innerHTML = `
+    <div class="board-meta">${isAdminMsg ? '⚙ ' : ''}${msg.displayName} · ${timeAgo(msg.createdAt)}</div>
+    <div class="board-text">${renderMessageText(msg.text)}</div>
+  `;
+  el.appendChild(av);
+  el.appendChild(bubble);
+  return el;
+}
+
+function scrollToBottom(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+// Extract a YouTube video ID from common URL shapes, or null
+function youtubeId(url) {
+  const m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Turn raw message text into safe HTML: escape everything, make URLs
+// clickable, and append a thumbnail card for any YouTube links.
+function renderMessageText(raw) {
+  const text = String(raw == null ? '' : raw);
+  const urlRe = /(https?:\/\/[^\s]+)/g;
+  let out = '', last = 0, m;
+  const ytIds = [];
+  while ((m = urlRe.exec(text)) !== null) {
+    out += esc(text.slice(last, m.index)).replace(/\n/g, '<br>');
+    let url = m[0], trail = '';
+    const tm = url.match(/[)\]\.,!?;:'"]+$/); // don't swallow trailing punctuation
+    if (tm) { trail = tm[0]; url = url.slice(0, -trail.length); }
+    const safeUrl = esc(url);
+    out += `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer nofollow" class="board-link">${safeUrl}</a>`;
+    out += esc(trail);
+    const id = youtubeId(url);
+    if (id && !ytIds.includes(id)) ytIds.push(id);
+    last = m.index + m[0].length;
+  }
+  out += esc(text.slice(last)).replace(/\n/g, '<br>');
+  ytIds.forEach(id => {
+    out += `<a href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener noreferrer" class="yt-card">` +
+           `<span class="yt-thumb" style="background-image:url('https://i.ytimg.com/vi/${id}/hqdefault.jpg')">` +
+           `<span class="yt-play">&#9654;</span></span></a>`;
+  });
+  return out;
+}
+
+async function renderBoard() {
+  if (boardUnsubscribe) { boardUnsubscribe(); boardUnsubscribe = null; }
+  if (dmUnsubscribe) { dmUnsubscribe(); dmUnsubscribe = null; }
+  const boardEl = document.getElementById('board-messages');
+  boardUnsubscribe = db.collection('board').orderBy('createdAt', 'asc').onSnapshot(snap => {
+    if (snap.empty) { boardEl.innerHTML = '<div class="board-empty">No messages yet. Be the first! 🎉</div>'; return; }
+    boardEl.innerHTML = '';
+    snap.forEach(doc => {
+      const msg = doc.data();
+      boardEl.appendChild(renderBoardMessage(msg, 'board-messages', msg.uid === currentUser.uid, msg.isAdmin));
+    });
+    scrollToBottom('board-messages');
+  }, () => { boardEl.innerHTML = '<div class="board-empty">Error loading messages.</div>'; });
+
+  const dmEl = document.getElementById('dm-messages');
+  let dmQuery;
+  if (isAdmin()) {
+    dmQuery = db.collection('dm_board').orderBy('createdAt', 'asc');
+  } else {
+    dmQuery = db.collection('dm_board').where('visibleTo', 'array-contains', currentUser.uid).orderBy('createdAt', 'asc');
+  }
+  dmUnsubscribe = dmQuery.onSnapshot(snap => {
+    if (snap.empty) { dmEl.innerHTML = '<div class="board-empty">No messages yet. Send the commissioners a message below.</div>'; return; }
+    dmEl.innerHTML = '';
+    snap.forEach(doc => {
+      const msg = doc.data();
+      dmEl.appendChild(renderBoardMessage(msg, 'dm-messages', msg.uid === currentUser.uid, msg.isAdmin));
+    });
+    scrollToBottom('dm-messages');
+  }, () => { dmEl.innerHTML = '<div class="board-empty">Error loading messages.</div>'; });
+}
+
+async function postMessage() {
+  const input = document.getElementById('board-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await db.collection('board').add({ text, uid: currentUser.uid, displayName: currentUser.displayName || currentUser.email, isAdmin: isAdmin(), createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch(e) { toast('Error posting: ' + e.message, true); }
+}
+
+async function postDM() {
+  const input = document.getElementById('dm-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    await db.collection('dm_board').add({ text, uid: currentUser.uid, displayName: currentUser.displayName || currentUser.email, isAdmin: false, visibleTo: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch(e) { toast('Error sending: ' + e.message, true); }
+}
+
+async function postAdminDMReply() {
+  if (!isAdmin()) return;
+  const input = document.getElementById('admin-dm-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  try {
+    const snap = await db.collection('dm_board').get();
+    const uids = [...new Set(snap.docs.map(d => d.data().uid))];
+    await db.collection('dm_board').add({ text, uid: currentUser.uid, displayName: currentUser.displayName || 'Commissioner', isAdmin: true, visibleTo: uids, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    toast('Reply sent to all DM participants ✓');
+  } catch(e) { toast('Error: ' + e.message, true); }
+}
+
+function renderAdminDMInbox() {
+  if (!isAdmin()) return;
+  if (adminDmUnsubscribe) { adminDmUnsubscribe(); adminDmUnsubscribe = null; }
+  const el = document.getElementById('admin-dm-messages');
+  adminDmUnsubscribe = db.collection('dm_board').orderBy('createdAt', 'asc').onSnapshot(snap => {
+    if (snap.empty) { el.innerHTML = '<div class="board-empty" style="color:var(--muted)">No DMs yet.</div>'; return; }
+    el.innerHTML = '';
+    snap.forEach(doc => {
+      const msg = doc.data();
+      el.appendChild(renderBoardMessage(msg, 'admin-dm-messages', msg.uid === currentUser.uid, msg.isAdmin));
+    });
+    scrollToBottom('admin-dm-messages');
+  });
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+function toast(msg, isErr = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  t.className = 'toast' + (isErr ? ' err' : '') + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 window.addEventListener('load', initApp);
