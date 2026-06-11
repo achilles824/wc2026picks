@@ -1156,10 +1156,13 @@ function calcGroupScore(picks){const off=officialData.groupResults||{};let s=0;O
 function calcBracketScore(picks){const off=officialData.bracketResults||{};const pts={r32:1,r16:2,qf:4,sf:8,f:16};let s=0;Object.keys(picks).forEach(key=>{if(off[key]&&off[key]===picks[key])s+=(pts[key.split('_')[0]]||0);});return s;}
 
 // BEER RUN
-let brMyData={drank:{},notes:{}},brTeamData=null,brAllUsers={},brAllTeams=[],brFilter='all',brLbTab='individual',brEditingNote=null;
+let brMyData={drank:{},notes:{}},brTeamData=null,brAllUsers={},brAllTeams=[],brUserNames={},brFilter='all',brLbTab='individual',brEditingNote=null;
 let brUnsubMy=null,brUnsubTeam=null,brUnsubUsers=null,brUnsubTeams=null;
 
 async function renderBeerRun(){
+  // Build uid -> display name map from the users collection so the
+  // leaderboard can show real names instead of raw user IDs.
+  try{const usnap=await db.collection('users').get();brUserNames={};usnap.forEach(doc=>{const d=doc.data();brUserNames[doc.id]=d.displayName||d.email||doc.id;});}catch(e){}
   if(brUnsubMy){brUnsubMy();brUnsubMy=null;}
   brUnsubMy=db.collection('beerrun').doc(currentUser.uid).onSnapshot(doc=>{brMyData=doc.exists?doc.data():{drank:{},notes:{}};brMyData.drank=brMyData.drank||{};brMyData.notes=brMyData.notes||{};renderBrStats();renderBrBeerList();});
   if(brUnsubUsers){brUnsubUsers();brUnsubUsers=null;}
@@ -1200,7 +1203,7 @@ function brCopyCode(code){navigator.clipboard.writeText(code).then(()=>toast('Co
 
 async function brToggleDrank(country){
   const next=!brMyData.drank[country];brMyData.drank[country]=next;renderBrStats();renderBrBeerList();
-  try{await db.collection('beerrun').doc(currentUser.uid).set({drank:{[country]:next}},{merge:true});if(brTeamData&&next)await db.collection('beerteams').doc(brTeamData.id).set({drank:{[country]:true}},{merge:true});if(next)toast('🍺 '+country+' checked off!');}
+  try{await db.collection('beerrun').doc(currentUser.uid).set({drank:{[country]:next},displayName:(currentUser.displayName||currentUser.email)},{merge:true});if(brTeamData&&next)await db.collection('beerteams').doc(brTeamData.id).set({drank:{[country]:true}},{merge:true});if(next)toast('🍺 '+country+' checked off!');}
   catch(e){toast('Save failed: '+e.message,true);}
 }
 async function brSaveNote(country){const safeId=country.replace(/[^a-z0-9]/gi,'');const inp=document.getElementById('br-note-inp-'+safeId);const val=inp?inp.value.trim():'';brMyData.notes=brMyData.notes||{};brMyData.notes[country]=val;brEditingNote=null;renderBrBeerList();try{await db.collection('beerrun').doc(currentUser.uid).set({notes:{[country]:val}},{merge:true});}catch(e){toast('Note save failed',true);}}
@@ -1243,7 +1246,7 @@ function renderBrBeerList(){
 function renderBrLeaderboard(){
   const el=document.getElementById('br-leaderboard');if(!el)return;
   if(brLbTab==='individual'){
-    const rows=[];Object.entries(brAllUsers).forEach(([uid,data])=>{const count=BEERS.filter(b=>(data.drank||{})[b.country]).length;const pct=Math.round(count/BEERS.length*100);const name=data.displayName||uid;rows.push({uid,name,count,pct});});rows.sort((a,b)=>b.count-a.count);
+    const rows=[];Object.entries(brAllUsers).forEach(([uid,data])=>{const count=BEERS.filter(b=>(data.drank||{})[b.country]).length;const pct=Math.round(count/BEERS.length*100);const name=brUserNames[uid]||data.displayName||uid;rows.push({uid,name,count,pct});});rows.sort((a,b)=>b.count-a.count);
     if(!rows.length){el.innerHTML='<div style="color:rgba(255,255,255,.3);font-size:13px;padding:1rem">No one has checked off beers yet.</div>';return;}
     const medals=['g','s','b'];let html=`<div class="br-lb-wrap"><div class="br-lb-hdr ind"><span style="text-align:center">#</span><span>Player</span><span style="text-align:right">Beers</span><span style="text-align:right">Progress</span></div>`;
     rows.forEach((r,i)=>{const isMe=r.uid===currentUser.uid;html+=`<div class="br-lb-row ind${isMe?' me':''}"><span class="br-rank ${medals[i]||''}">${i+1}</span><span>${esc(r.name)}${isMe?' <span style="font-size:10px;color:var(--green)">(you)</span>':''}</span><span class="br-count">${r.count} / ${BEERS.length}</span><span class="br-pct">${r.pct}%</span></div>`;});
