@@ -1125,12 +1125,40 @@ async function saveTiebreaker(){const tb=parseInt(document.getElementById('tiebr
 // BRACKET
 let bracketPicks={};
 function resolveTeam(seed,groupResults){const[grp,pos]=seed;if(grp==='?')return null;const arr=groupResults[grp];if(!arr||!arr[pos-1])return null;return arr[pos-1];}
-function getSlotTeams(roundId,matchIdx){const groupResults=officialData.groupResults||{};const autoSlots=getAutoSeededSlots(groupResults);const manualSlots=officialData.bracketSlots||{};if(roundId==='r32'){const manual=((manualSlots.r32||{})[matchIdx])||{};const auto=(autoSlots.r32||{})[matchIdx]||{};const seeding=R32_SEEDING[matchIdx]||{};return{t1:manual.t1||auto.t1||null,t2:manual.t2||auto.t2||null,t1label:seeding.t1?formatSeedLabel(seeding.t1,seeding.label):'?',t2label:seeding.t2?formatSeedLabel(seeding.t2,seeding.label):'?'};}const slot=((manualSlots[roundId]||{})[matchIdx])||{};return{t1:slot.t1||null,t2:slot.t2||null,t1label:'TBD',t2label:'TBD'};}
+function getPrevRound(roundId){
+  const order=['r32','r16','qf','sf','f'];
+  const idx=order.indexOf(roundId);
+  return idx>0?order[idx-1]:null;
+}
+  function getSlotTeams(roundId,matchIdx){const groupResults=officialData.groupResults||{};const autoSlots=getAutoSeededSlots(groupResults);const manualSlots=officialData.bracketSlots||{};if(roundId==='r32'){const manual=((manualSlots.r32||{})[matchIdx])||{};const auto=(autoSlots.r32||{})[matchIdx]||{};const seeding=R32_SEEDING[matchIdx]||{};return{t1:manual.t1||auto.t1||null,t2:manual.t2||auto.t2||null,t1label:seeding.t1?formatSeedLabel(seeding.t1,seeding.label):'?',t2label:seeding.t2?formatSeedLabel(seeding.t2,seeding.label):'?'};}const slot=((manualSlots[roundId]||{})[matchIdx])||{};
+const prevRound=getPrevRound(roundId);
+const userT1=prevRound?(bracketPicks[prevRound+'_'+(matchIdx*2)]||null):null;
+const userT2=prevRound?(bracketPicks[prevRound+'_'+(matchIdx*2+1)]||null):null;
+return{t1:slot.t1||userT1||null,t2:slot.t2||userT2||null,t1label:'TBD',t2label:'TBD'};}
 function formatSeedLabel(seed,matchLabel){const[grp,pos]=seed;if(pos===1)return`1${grp}`;if(pos===2)return`2${grp}`;if(pos===3){const match=matchLabel&&matchLabel.match(/\(([A-Z]+)\)/);const groups=match?match[1].split('').join('/'):'TBD';return`3rd (${groups})`;}return'?';}
 function isMatchTimeLocked(roundId,matchIdx){let kickoff=null;if(roundId==='r32')kickoff=R32_SEEDING[matchIdx]?R32_SEEDING[matchIdx].kickoff:null;else kickoff=(ROUND_SCHEDULES[roundId]||[])[matchIdx]?(ROUND_SCHEDULES[roundId][matchIdx].kickoff):null;if(!kickoff)return false;return new Date()>=new Date(kickoff+'-05:00');}
 function getAutoSeededSlots(groupResults){const slots={r32:{}};R32_SEEDING.forEach((seeding,i)=>{const t1=resolveTeam(seeding.t1,groupResults);const t2=resolveTeam(seeding.t2,groupResults);slots.r32[i]={t1,t2,label:seeding.label,kickoff:seeding.kickoff,venue:seeding.venue};});return slots;}
 async function renderBracket(){renderPayBanner('pay-banner-bracket');renderTiebreaker();await loadOfficialData();try{const doc=await db.collection('users').doc(currentUser.uid).get();bracketPicks=(doc.data()||{}).bracketPicks||{};}catch(e){bracketPicks={};}const con=document.getElementById('bracket-con');con.innerHTML='';const globalLocked=!!officialData.bracketLocked;const isAdminUser=currentUser&&(currentUser.email===ADMIN_EMAIL||currentUser.email===ADMIN_EMAIL_2);const autoSlots=getAutoSeededSlots(officialData.groupResults||{});ROUNDS.forEach(round=>{const col=document.createElement('div');col.className='bround';col.innerHTML=`<div class="rhdr">${round.name}<span class="rpts">${round.pts} pt${round.pts>1?'s':''} each</span></div>`;for(let i=0;i<round.matches;i++){const slotData=getSlotTeams(round.id,i);const{t1,t2,t1label,t2label}=slotData;const key=round.id+'_'+i;const picked=bracketPicks[key]||null;const timeLocked=!isAdminUser&&isMatchTimeLocked(round.id,i);const matchLocked=globalLocked||timeLocked;const sched=round.id==='r32'?(autoSlots.r32[i]||{}):((ROUND_SCHEDULES[round.id]||[])[i]||{});const slot=document.createElement('div');slot.className='mslot';slot.style.flex='1';slot.style.minHeight=Math.max(62,400/round.matches)+'px';if(sched.kickoff){const timeEl=document.createElement('div');timeEl.className='match-label';const d=new Date(sched.kickoff+'-05:00');const dateStr=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short',timeZone:'America/Chicago'});timeEl.textContent=(sched.venue?sched.venue+' · ':'')+dateStr+(timeLocked&&!isAdminUser?' 🔒':'');slot.appendChild(timeEl);}const card=document.createElement('div');card.className='mcard';[[t1,t1label],[t2,t2label]].forEach(([team,label])=>{const isKnown=!!team;const row=document.createElement('div');row.className='bteam'+(!isKnown?' tbd':'')+(picked===team?' sel':'');if(isKnown){row.innerHTML=`${flagImg(team,true)}<span>${team}</span>`;if(!matchLocked)row.onclick=()=>pickWinner(round.id,i,team);if(matchLocked&&picked!==team)row.style.opacity='0.6';}else{row.innerHTML=`<span style="color:#888;font-size:11px;font-style:italic;font-weight:600">${label||'TBD'}</span>`;}card.appendChild(row);});slot.appendChild(card);col.appendChild(slot);}con.appendChild(col);});}
-async function pickWinner(roundId,matchIdx,team){const key=roundId+'_'+matchIdx;bracketPicks[key]=team;try{await db.collection('users').doc(currentUser.uid).update({['bracketPicks.'+key]:team});}catch(e){}renderBracket();}
+function cascadeClear(roundId,matchIdx,removedTeam){
+  const order=['r32','r16','qf','sf','f'];
+  const roundIdx=order.indexOf(roundId);
+  if(roundIdx<0||roundIdx>=order.length-1)return;
+  const nextRound=order[roundIdx+1];
+  const nextMatchIdx=Math.floor(matchIdx/2);
+  const nextKey=nextRound+'_'+nextMatchIdx;
+  if(bracketPicks[nextKey]===removedTeam){
+    delete bracketPicks[nextKey];
+    cascadeClear(nextRound,nextMatchIdx,removedTeam);
+  }
+}
+  async function pickWinner(roundId,matchIdx,team){
+  const key=roundId+'_'+matchIdx;
+  const oldWinner=bracketPicks[key]||null;
+  bracketPicks[key]=team;
+  if(oldWinner&&oldWinner!==team)cascadeClear(roundId,matchIdx,oldWinner);
+  try{await db.collection('users').doc(currentUser.uid).update({bracketPicks});}catch(e){}
+  renderBracket();
+}
 async function saveBracket(){if(officialData.bracketLocked){toast('Bracket picks are locked!',true);return;}try{await db.collection('users').doc(currentUser.uid).update({bracketPicks});toast('Bracket picks saved! ✓');}catch(e){toast('Error: '+e.message,true);}}
 
 // SCORES
