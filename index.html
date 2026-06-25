@@ -1158,7 +1158,7 @@ async function saveBracket(){if(officialData.bracketLocked){toast('Bracket picks
 
 // SCORES
 let scheduleData=null,scoresFilter='all',scoresLastFetch=null;
-function parseMatchDate(dateStr,timeStr){const match=timeStr.match(/(\d{2}):(\d{2})\s+UTC([+-]\d+)/);if(!match)return new Date(dateStr);const[,hh,mm,off]=match;const offsetMin=parseInt(off)*60;const iso=`${dateStr}T${hh}:${mm}:00`;const d=new Date(iso);d.setMinutes(d.getMinutes()-offsetMin);return d;}
+function parseMatchDate(dateStr,timeStr){const match=timeStr.match(/(\d{2}):(\d{2})\s+UTC([+-]\d+)/);if(!match)return new Date(dateStr);const[,hh,mm,off]=match;const offsetMin=parseInt(off)*60;const iso=`${dateStr}T${hh}:${mm}:00Z`;const d=new Date(iso);d.setMinutes(d.getMinutes()-offsetMin);return d;}
 function isGroupMatch(m){return!!m.group;}function isKnockoutMatch(m){return!m.group;}
 function isToday(d){const now=new Date();return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();}
 function formatMatchTime(d){return d.toLocaleString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short',timeZone:'America/Chicago'});}
