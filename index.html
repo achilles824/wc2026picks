@@ -1151,13 +1151,19 @@ function cascadeClear(roundId,matchIdx,removedTeam){
     cascadeClear(nextRound,nextMatchIdx,removedTeam);
   }
 }
-  async function pickWinner(roundId,matchIdx,team){
+  function pickWinner(roundId,matchIdx,team){
   const key=roundId+'_'+matchIdx;
   const oldWinner=bracketPicks[key]||null;
-  bracketPicks[key]=team;
-  if(oldWinner&&oldWinner!==team)cascadeClear(roundId,matchIdx,oldWinner);
-  try{await db.collection('users').doc(currentUser.uid).update({bracketPicks});}catch(e){}
-  renderBracket();
+  if(oldWinner===team){
+    // Toggle off — deselect and clear anything downstream
+    delete bracketPicks[key];
+    cascadeClear(roundId,matchIdx,team);
+  } else {
+    // New selection — record and clear stale downstream picks
+    bracketPicks[key]=team;
+    if(oldWinner)cascadeClear(roundId,matchIdx,oldWinner);
+  }
+  renderBracket(); // local state only — Save button commits to Firebase
 }
 async function saveBracket(){if(officialData.bracketLocked){toast('Bracket picks are locked!',true);return;}try{await db.collection('users').doc(currentUser.uid).update({bracketPicks});toast('Bracket picks saved! ✓');}catch(e){toast('Error: '+e.message,true);}}
 
