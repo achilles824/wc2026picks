@@ -1154,7 +1154,35 @@ function cascadeClear(roundId,matchIdx,removedTeam){const order=['r32','r16','qf
   }
   renderBracket(); // local state only — Save button commits to Firebase
 }
-async function saveBracket(){if(officialData.bracketLocked){toast('Bracket picks are locked!',true);return;}try{await db.collection('users').doc(currentUser.uid).update({bracketPicks});toast('Bracket picks saved! ✓');}catch(e){toast('Error: '+e.message,true);}}
+async function saveBracket(){
+  if(officialData.bracketLocked){toast('Bracket picks are locked!',true);return;}
+  const isAdminUser=currentUser&&(currentUser.email===ADMIN_EMAIL||currentUser.email===ADMIN_EMAIL_2);
+  let reverted=0;
+  // Guard: a stale open tab shouldn't be able to change a game that has already kicked off.
+  // Revert any time-locked game to its last-saved value before writing.
+  if(!isAdminUser){
+    try{
+      const doc=await db.collection('users').doc(currentUser.uid).get();
+      const stored=(doc.data()||{}).bracketPicks||{};
+      ROUNDS.forEach(round=>{
+        for(let i=0;i<round.matches;i++){
+          if(!isMatchTimeLocked(round.id,i))continue;
+          const key=round.id+'_'+i;
+          const storedVal=stored[key]||null;
+          if((bracketPicks[key]||null)!==storedVal){
+            if(storedVal)bracketPicks[key]=storedVal;else delete bracketPicks[key];
+            reverted++;
+          }
+        }
+      });
+      if(reverted)renderBracket();
+    }catch(e){/* read failed — proceed to save what we have */}
+  }
+  try{
+    await db.collection('users').doc(currentUser.uid).update({bracketPicks});
+    toast(reverted?`Saved — but ${reverted} change(s) to games that already started were discarded.`:'Bracket picks saved! ✓',reverted>0);
+  }catch(e){toast('Error: '+e.message,true);}
+}
 
 // SCORES
 let scheduleData=null,scoresFilter='all',scoresLastFetch=null;
